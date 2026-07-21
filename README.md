@@ -15,7 +15,7 @@ Works transparently with `generateText`, `streamText`, `generateObject`, and `st
 npm install ai-resilient ai
 ```
 
-`ai` (v5) is a peer dependency. `ai-resilient` has zero runtime dependencies.
+`ai` (v5) and `@ai-sdk/provider` are peer dependencies (`@ai-sdk/provider` ships with `ai`, so most package managers install it automatically). `ai-resilient` has zero runtime dependencies.
 
 ## Usage
 

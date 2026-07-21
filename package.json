@@ -29,6 +29,7 @@
     "prepublishOnly": "npm run typecheck && npm run lint && npm run format:check && npm run test && npm run build"
   },
   "peerDependencies": {
+    "@ai-sdk/provider": "^2.0.0",
     "ai": "^5.0.0"
   },
   "devDependencies": {
