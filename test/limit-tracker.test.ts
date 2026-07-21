@@ -116,7 +116,10 @@ describe('LimitTracker', () => {
       const dayLimits = { requestsPerDay: 10 };
       const tracker = makeTracker({ threshold: 0.1 });
       for (let i = 0; i < 9; i++) {
-        await tracker.recordSuccess('m1', { provider: 'test', limits: dayLimits });
+        await tracker.recordSuccess('m1', {
+          provider: 'test',
+          limits: dayLimits,
+        });
       }
       expect(await tracker.isAvailable('m1', dayLimits)).toBe(false);
       vi.advanceTimersByTime(2 * 60_000);

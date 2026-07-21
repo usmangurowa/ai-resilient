@@ -4,7 +4,7 @@ Smart model fallback for the [Vercel AI SDK](https://ai-sdk.dev) (v5).
 
 `ai-resilient` wraps a chain of language models in a single `LanguageModelV2` that:
 
-- **Reactively falls back** to the next model on rate-limit (429/quota) and transient (5xx/network) errors — but *not* on fatal errors (400/401/403), which throw immediately.
+- **Reactively falls back** to the next model on rate-limit (429/quota) and transient (5xx/network) errors — but _not_ on fatal errors (400/401/403), which throw immediately.
 - **Proactively switches** away from models that are near a known rate limit, using provider rate-limit response headers (OpenAI, Anthropic, Groq, Google, Mistral) and/or self-counted usage against limits you declare.
 
 Works transparently with `generateText`, `streamText`, `generateObject`, and `streamObject`, using your own API keys — no gateway required.
@@ -27,7 +27,10 @@ import { google } from '@ai-sdk/google';
 
 const model = createResilient({
   models: [
-    { model: groq('llama-3.3-70b-versatile'), limits: { requestsPerMinute: 30 } },
+    {
+      model: groq('llama-3.3-70b-versatile'),
+      limits: { requestsPerMinute: 30 },
+    },
     { model: google('gemini-2.0-flash') },
   ],
 });
@@ -41,11 +44,11 @@ Models are tried in the order you configure them. The first model is the primary
 
 ```ts
 createResilient({
-  models,                      // required: [{ model, limits? }, ...]
-  store: memoryStore(),        // default; pluggable (Redis/KV)
-  threshold: 0.1,              // skip a model when <10% of a known limit remains
-  cooldown: 60_000,            // ms to bench a model after a rate-limit error
-  onFallback: (info) => {},    // { from, to, reason: 'rate-limit' | 'transient' | 'proactive' }
+  models, // required: [{ model, limits? }, ...]
+  store: memoryStore(), // default; pluggable (Redis/KV)
+  threshold: 0.1, // skip a model when <10% of a known limit remains
+  cooldown: 60_000, // ms to bench a model after a rate-limit error
+  onFallback: (info) => {}, // { from, to, reason: 'rate-limit' | 'transient' | 'proactive' }
   onError: (error, modelId) => {},
 });
 ```
@@ -54,16 +57,16 @@ Per-model `limits` (`requestsPerMinute`, `requestsPerDay`, `tokensPerMinute`) en
 
 ## Behavior
 
-| Situation | Behavior |
-|---|---|
-| 429 / quota exceeded | Bench model (`retry-after` or `cooldown`), try next |
-| 5xx / overloaded / network error | Try next model (no bench) |
-| 400 / 401 / 403 | Throw immediately |
-| Stream error before first content chunk | Fall back, fresh stream on next model |
-| Stream error after first content chunk | Propagate to caller |
-| All models fail | `AllModelsExhaustedError` with per-model attempts |
-| All models near a limit | Try all in order anyway |
-| Store unavailable | Assume available, skip recording |
+| Situation                               | Behavior                                            |
+| --------------------------------------- | --------------------------------------------------- |
+| 429 / quota exceeded                    | Bench model (`retry-after` or `cooldown`), try next |
+| 5xx / overloaded / network error        | Try next model (no bench)                           |
+| 400 / 401 / 403                         | Throw immediately                                   |
+| Stream error before first content chunk | Fall back, fresh stream on next model               |
+| Stream error after first content chunk  | Propagate to caller                                 |
+| All models fail                         | `AllModelsExhaustedError` with per-model attempts   |
+| All models near a limit                 | Try all in order anyway                             |
+| Store unavailable                       | Assume available, skip recording                    |
 
 ### Error handling
 

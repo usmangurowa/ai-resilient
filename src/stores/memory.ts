@@ -24,15 +24,16 @@ export function memoryStore(): Store {
   }
 
   return {
-    async get(key) {
+    get(key) {
       const entry = evictIfExpired(key);
-      return entry?.value ?? null;
+      return Promise.resolve(entry?.value ?? null);
     },
-    async set(key, value, ttlMs) {
+    set(key, value, ttlMs) {
       map.set(key, {
         value,
         ...(ttlMs !== undefined ? { expiresAt: Date.now() + ttlMs } : {}),
       });
+      return Promise.resolve();
     },
   };
 }

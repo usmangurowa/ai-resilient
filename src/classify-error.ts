@@ -18,13 +18,15 @@ function getErrorShape(error: unknown): ErrorShape {
   }
   const e = error as Record<string, unknown>;
   return {
-    statusCode: typeof e['statusCode'] === 'number' ? e['statusCode'] : undefined,
+    statusCode:
+      typeof e['statusCode'] === 'number' ? e['statusCode'] : undefined,
     responseHeaders:
       typeof e['responseHeaders'] === 'object' && e['responseHeaders'] !== null
         ? (e['responseHeaders'] as Record<string, string>)
         : undefined,
-    isRetryable: typeof e['isRetryable'] === 'boolean' ? e['isRetryable'] : undefined,
-    message: typeof e['message'] === 'string' ? e['message'] : String(error),
+    isRetryable:
+      typeof e['isRetryable'] === 'boolean' ? e['isRetryable'] : undefined,
+    message: typeof e['message'] === 'string' ? e['message'] : undefined,
   };
 }
 

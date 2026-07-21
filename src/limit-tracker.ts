@@ -157,7 +157,11 @@ export class LimitTracker {
     if (Object.values(parsed).every((v) => v === undefined)) return;
     const ttl = parsed.resetMs ?? DEFAULT_SNAPSHOT_TTL_MS;
     const snapshot: HeaderSnapshot = { parsed, expiresAt: Date.now() + ttl };
-    await this.store.set(this.headersKey(modelKey), JSON.stringify(snapshot), ttl);
+    await this.store.set(
+      this.headersKey(modelKey),
+      JSON.stringify(snapshot),
+      ttl,
+    );
   }
 
   private async recordUsage(
@@ -168,8 +172,7 @@ export class LimitTracker {
     const usage = await this.readUsage(modelKey);
     const now = Date.now();
 
-    const trackDay =
-      limits.requestsPerDay !== undefined ? DAY_MS : MINUTE_MS;
+    const trackDay = limits.requestsPerDay !== undefined ? DAY_MS : MINUTE_MS;
     usage.requests = usage.requests.filter((t) => now - t < trackDay);
     usage.requests.push(now);
 

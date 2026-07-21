@@ -19,7 +19,9 @@ export class AllModelsExhaustedError extends Error {
     const summary = attempts
       .map((a) => `${a.modelId} (${a.classification})`)
       .join(', ');
-    super(`All models exhausted after ${attempts.length} attempt(s): ${summary}`);
+    super(
+      `All models exhausted after ${attempts.length} attempt(s): ${summary}`,
+    );
     this.attempts = attempts;
   }
 

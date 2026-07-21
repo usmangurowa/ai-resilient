@@ -413,8 +413,6 @@ describe('ResilientLanguageModel doGenerate', () => {
   });
 
   it('requires at least one model', () => {
-    expect(() => createResilient({ models: [] })).toThrow(
-      /at least one model/,
-    );
+    expect(() => createResilient({ models: [] })).toThrow(/at least one model/);
   });
 });

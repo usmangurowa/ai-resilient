@@ -7,11 +7,7 @@ import type {
 import { classifyError, getRetryAfterMs } from './classify-error';
 import { AllModelsExhaustedError, type ModelAttempt } from './errors';
 import { LimitTracker } from './limit-tracker';
-import type {
-  FallbackReason,
-  ModelConfig,
-  ResilientOptions,
-} from './types';
+import type { FallbackReason, ModelConfig, ResilientOptions } from './types';
 
 type DoGenerateResult = Awaited<ReturnType<LanguageModelV2['doGenerate']>>;
 type DoStreamResult = Awaited<ReturnType<LanguageModelV2['doStream']>>;

@@ -165,9 +165,9 @@ describe('ResilientLanguageModel doStream', () => {
     const { stream } = await model.doStream(callOptions);
     const parts = await readAllParts(stream);
 
-    expect(parts.some((p) => p.type === 'error' && p.error === midStreamError)).toBe(
-      true,
-    );
+    expect(
+      parts.some((p) => p.type === 'error' && p.error === midStreamError),
+    ).toBe(true);
     expect(
       parts.filter((p) => p.type === 'text-delta').map((p) => p.delta),
     ).toEqual(['partial']);
@@ -183,7 +183,11 @@ describe('ResilientLanguageModel doStream', () => {
           start(controller) {
             controller.enqueue({ type: 'stream-start', warnings: [] });
             controller.enqueue({ type: 'text-start', id: '1' });
-            controller.enqueue({ type: 'text-delta', id: '1', delta: 'partial' });
+            controller.enqueue({
+              type: 'text-delta',
+              id: '1',
+              delta: 'partial',
+            });
             controller.error(new Error('connection reset'));
           },
         }),
@@ -265,8 +269,7 @@ describe('ResilientLanguageModel doStream', () => {
     const secondary = new MockLanguageModelV2({
       provider: 'mock-b',
       modelId: 'model-b',
-      doStream: async () =>
-        streamOf([{ type: 'error', error: apiError(503) }]),
+      doStream: async () => streamOf([{ type: 'error', error: apiError(503) }]),
     });
     const model = createResilient({
       models: [{ model: primary }, { model: secondary }],
