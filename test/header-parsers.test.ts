@@ -87,6 +87,41 @@ describe('parseRateLimitHeaders', () => {
     });
   });
 
+  it('parses OpenAI-style headers from Mistral when present', () => {
+    const parsed = parseRateLimitHeaders('mistral.chat', {
+      'x-ratelimit-limit-requests': '60',
+      'x-ratelimit-remaining-requests': '59',
+      'x-ratelimit-limit-tokens': '500000',
+      'x-ratelimit-remaining-tokens': '499000',
+    });
+    expect(parsed.requestsLimit).toBe(60);
+    expect(parsed.requestsRemaining).toBe(59);
+    expect(parsed.tokensLimit).toBe(500000);
+    expect(parsed.tokensRemaining).toBe(499000);
+  });
+
+  it('parses IETF draft headers from Google', () => {
+    const parsed = parseRateLimitHeaders('google.generative-ai', {
+      'ratelimit-limit': '15',
+      'ratelimit-remaining': '1',
+      'ratelimit-reset': '40',
+    });
+    expect(parsed).toEqual({
+      requestsLimit: 15,
+      requestsRemaining: 1,
+      resetMs: 40_000,
+    });
+  });
+
+  it('clamps Anthropic reset timestamps in the past to zero', () => {
+    const past = new Date(Date.now() - 30_000).toISOString();
+    const parsed = parseRateLimitHeaders('anthropic.messages', {
+      'anthropic-ratelimit-requests-remaining': '10',
+      'anthropic-ratelimit-requests-reset': past,
+    });
+    expect(parsed.resetMs).toBe(0);
+  });
+
   it('prefers OpenAI-style headers for unknown providers when present', () => {
     const parsed = parseRateLimitHeaders('google.generative-ai', {
       'x-ratelimit-remaining-requests': '3',

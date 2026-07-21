@@ -46,7 +46,11 @@ describe('classifyError', () => {
 
   it('classifies 5xx as transient', () => {
     expect(classifyError(apiError({ statusCode: 500 }))).toBe('transient');
+    expect(classifyError(apiError({ statusCode: 502 }))).toBe('transient');
     expect(classifyError(apiError({ statusCode: 503 }))).toBe('transient');
+    expect(classifyError(apiError({ statusCode: 504 }))).toBe('transient');
+    // Anthropic's "overloaded" status
+    expect(classifyError(apiError({ statusCode: 529 }))).toBe('transient');
   });
 
   it('classifies network/timeout messages as transient', () => {
@@ -74,6 +78,11 @@ describe('classifyError', () => {
     expect(classifyError(new Error('something else'))).toBe('fatal');
     expect(classifyError('string error')).toBe('fatal');
     expect(classifyError(null)).toBe('fatal');
+  });
+
+  it('classifies other 4xx statuses as fatal', () => {
+    expect(classifyError(apiError({ statusCode: 404 }))).toBe('fatal');
+    expect(classifyError(apiError({ statusCode: 422 }))).toBe('fatal');
   });
 });
 
