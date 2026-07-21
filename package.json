@@ -1,6 +1,6 @@
 {
   "name": "ai-resilient",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Smart model fallback for the Vercel AI SDK: reactive fallback on rate-limit/transient errors and proactive switching before limits are hit.",
   "license": "MIT",
   "type": "module",
