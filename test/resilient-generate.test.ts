@@ -412,6 +412,42 @@ describe('ResilientLanguageModel doGenerate', () => {
     ).toBe('from A');
   });
 
+  it('does not block the response on slow store writes (read-your-writes preserved)', async () => {
+    vi.useRealTimers(); // stalled-promise interplay with fake timers can hang
+    let resolveWrite: (() => void) | undefined;
+    const backing = new Map<string, string>();
+    const store: Store = {
+      get: async (key) => backing.get(key) ?? null,
+      set: async (key, value) => {
+        backing.set(key, value);
+        // First write stalls until released, simulating a slow network store.
+        if (resolveWrite === undefined) {
+          await new Promise<void>((r) => (resolveWrite = r));
+        }
+      },
+    };
+    const primary = new MockLanguageModelV2({
+      provider: 'mock-a',
+      modelId: 'model-a',
+      doGenerate: async () => okResult('one'),
+    });
+    const model = createResilient({
+      models: [{ model: primary, limits: { requestsPerMinute: 1 } }],
+      store,
+    });
+
+    // First call must resolve even though the store write is stalled.
+    await generateText({ model, prompt: 'hi', maxRetries: 0 });
+    resolveWrite?.();
+
+    // Second call flushes the pending record in buildPlan, then proceeds
+    // (single model: the all-skip override still tries it).
+    await generateText({ model, prompt: 'hi', maxRetries: 0 });
+    expect(primary.doGenerateCalls).toHaveLength(2);
+    // Usage bookkeeping landed in the store despite being off-path.
+    expect([...backing.keys()].some((k) => k.includes(':usage:'))).toBe(true);
+  });
+
   it('requires at least one model', () => {
     expect(() => createResilient({ models: [] })).toThrow(/at least one model/);
   });

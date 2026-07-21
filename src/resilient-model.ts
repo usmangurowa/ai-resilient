@@ -45,6 +45,14 @@ export class ResilientLanguageModel implements LanguageModelV2 {
   private readonly onFallback: ResilientOptions['onFallback'];
   private readonly onError: ResilientOptions['onError'];
 
+  /**
+   * Bookkeeping writes chained off the response path. buildPlan awaits
+   * this so the next call still sees all prior usage before deciding
+   * availability (read-your-writes), without success responses paying
+   * store-write latency.
+   */
+  private pendingRecords: Promise<void> = Promise.resolve();
+
   constructor(options: {
     models: ModelConfig[];
     tracker: LimitTracker;
@@ -79,12 +87,25 @@ export class ResilientLanguageModel implements LanguageModelV2 {
     return this.candidates[0]!.config.model;
   }
 
+  private queueRecordSuccess(
+    candidate: Candidate,
+    headers: Record<string, string> | undefined,
+    usage: LanguageModelV2Usage | undefined,
+  ): void {
+    this.pendingRecords = this.pendingRecords
+      .then(() => this.recordSuccess(candidate, headers, usage))
+      .catch(() => {
+        // Store bookkeeping failures must never surface to callers.
+      });
+  }
+
   /**
    * Order candidates and mark near-limit/benched ones as skipped. If
    * every model would be skipped, try all of them in configured order
    * anyway — attempting beats failing without trying.
    */
   private async buildPlan(): Promise<PlanEntry[]> {
+    await this.pendingRecords;
     const plan: PlanEntry[] = [];
     for (const candidate of this.candidates) {
       const available = await this.tracker.isAvailable(
@@ -162,7 +183,7 @@ export class ResilientLanguageModel implements LanguageModelV2 {
       this.fireFallbacks(pending, modelId);
       try {
         const result = await candidate.config.model.doGenerate(options);
-        await this.recordSuccess(
+        this.queueRecordSuccess(
           candidate,
           result.response?.headers,
           result.usage,
@@ -266,7 +287,7 @@ export class ResilientLanguageModel implements LanguageModelV2 {
             }
             done = true;
           }
-          await this.recordSuccess(candidate, result.response?.headers, usage);
+          this.queueRecordSuccess(candidate, result.response?.headers, usage);
           controller.close();
         },
         cancel: (reason) => reader.cancel(reason),
