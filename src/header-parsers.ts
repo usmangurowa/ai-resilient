@@ -4,10 +4,12 @@
 export interface ParsedRateLimit {
   requestsRemaining?: number | undefined;
   requestsLimit?: number | undefined;
+  /** Milliseconds until the request limit resets. */
+  requestsResetMs?: number | undefined;
   tokensRemaining?: number | undefined;
   tokensLimit?: number | undefined;
-  /** Milliseconds until the most restrictive parsed limit resets. */
-  resetMs?: number | undefined;
+  /** Milliseconds until the token limit resets. */
+  tokensResetMs?: number | undefined;
 }
 
 type Headers = Record<string, string>;
@@ -45,7 +47,7 @@ export function parseDuration(value: string | undefined): number | undefined {
     else if (unit === 's') ms += n * 1000;
     else ms += n;
   }
-  return matched ? ms : undefined;
+  return matched ? Math.round(ms) : undefined;
 }
 
 /** Parse an RFC 3339 timestamp into ms-from-now. */
@@ -56,22 +58,15 @@ function parseResetTimestamp(value: string | undefined): number | undefined {
   return Math.max(0, t - Date.now());
 }
 
-function minDefined(...values: (number | undefined)[]): number | undefined {
-  const defined = values.filter((v): v is number => v !== undefined);
-  return defined.length > 0 ? Math.min(...defined) : undefined;
-}
-
 /** OpenAI and Groq use `x-ratelimit-{limit,remaining,reset}-{requests,tokens}`. */
 function parseOpenAIStyle(h: Headers): ParsedRateLimit {
   return {
     requestsRemaining: num(h['x-ratelimit-remaining-requests']),
     requestsLimit: num(h['x-ratelimit-limit-requests']),
+    requestsResetMs: parseDuration(h['x-ratelimit-reset-requests']),
     tokensRemaining: num(h['x-ratelimit-remaining-tokens']),
     tokensLimit: num(h['x-ratelimit-limit-tokens']),
-    resetMs: minDefined(
-      parseDuration(h['x-ratelimit-reset-requests']),
-      parseDuration(h['x-ratelimit-reset-tokens']),
-    ),
+    tokensResetMs: parseDuration(h['x-ratelimit-reset-tokens']),
   };
 }
 
@@ -80,12 +75,12 @@ function parseAnthropic(h: Headers): ParsedRateLimit {
   return {
     requestsRemaining: num(h['anthropic-ratelimit-requests-remaining']),
     requestsLimit: num(h['anthropic-ratelimit-requests-limit']),
+    requestsResetMs: parseResetTimestamp(
+      h['anthropic-ratelimit-requests-reset'],
+    ),
     tokensRemaining: num(h['anthropic-ratelimit-tokens-remaining']),
     tokensLimit: num(h['anthropic-ratelimit-tokens-limit']),
-    resetMs: minDefined(
-      parseResetTimestamp(h['anthropic-ratelimit-requests-reset']),
-      parseResetTimestamp(h['anthropic-ratelimit-tokens-reset']),
-    ),
+    tokensResetMs: parseResetTimestamp(h['anthropic-ratelimit-tokens-reset']),
   };
 }
 
@@ -101,7 +96,7 @@ function parseGeneric(h: Headers): ParsedRateLimit {
   return {
     requestsRemaining: num(h['ratelimit-remaining']),
     requestsLimit: num(h['ratelimit-limit']),
-    ...(reset !== undefined ? { resetMs: reset * 1000 } : {}),
+    ...(reset !== undefined ? { requestsResetMs: reset * 1000 } : {}),
   };
 }
 

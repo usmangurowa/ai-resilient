@@ -179,6 +179,42 @@ describe('LimitTracker', () => {
       });
       expect(await tracker.isAvailable('m1')).toBe(false);
     });
+
+    it('keeps an exhausted dimension benched past a faster dimension reset', async () => {
+      const tracker = makeTracker({ threshold: 0.1 });
+      // Requests are exhausted for 60s; tokens are fine and reset in 1s.
+      await tracker.recordSuccess('m1', {
+        provider: 'openai.chat',
+        headers: {
+          'x-ratelimit-limit-requests': '100',
+          'x-ratelimit-remaining-requests': '0',
+          'x-ratelimit-reset-requests': '60s',
+          'x-ratelimit-limit-tokens': '1000',
+          'x-ratelimit-remaining-tokens': '900',
+          'x-ratelimit-reset-tokens': '1s',
+        },
+      });
+      expect(await tracker.isAvailable('m1')).toBe(false);
+      // The fast token reset must NOT clear the exhausted request dimension.
+      vi.advanceTimersByTime(1500);
+      expect(await tracker.isAvailable('m1')).toBe(false);
+      vi.advanceTimersByTime(60_000);
+      expect(await tracker.isAvailable('m1')).toBe(true);
+    });
+  });
+
+  describe('concurrent usage recording', () => {
+    it('does not drop counts from concurrent recordSuccess calls', async () => {
+      const tracker = makeTracker();
+      const limits = { requestsPerMinute: 10 };
+      await Promise.all(
+        Array.from({ length: 9 }, () =>
+          tracker.recordSuccess('m1', { provider: 'test', limits }),
+        ),
+      );
+      // 9 of 10 rpm used → at/above the 0.1-threshold cutoff → unavailable.
+      expect(await tracker.isAvailable('m1', limits)).toBe(false);
+    });
   });
 
   describe('store failure degradation', () => {

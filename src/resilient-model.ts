@@ -204,79 +204,79 @@ export class ResilientLanguageModel implements LanguageModelV2 {
       throw new AllModelsExhaustedError(attempts);
     };
 
-    const initial = await acquire();
-
-    const pump = async (
-      current: { candidate: Candidate; result: DoStreamResult },
-      controller: ReadableStreamDefaultController<LanguageModelV2StreamPart>,
-    ): Promise<void> => {
-      const reader = current.result.stream.getReader();
-      let buffer: LanguageModelV2StreamPart[] = [];
-      let contentStarted = false;
+    // Try candidates until one produces content (or finishes cleanly)
+    // before returning, so the returned request/response metadata always
+    // belongs to the model that actually serves the stream.
+    for (;;) {
+      const { candidate, result } = await acquire();
+      const reader = result.stream.getReader();
+      const prelude: LanguageModelV2StreamPart[] = [];
+      let firstContent: LanguageModelV2StreamPart | undefined;
       let usage: LanguageModelV2Usage | undefined;
+      let done = false;
 
       try {
         for (;;) {
-          const { done, value } = await reader.read();
-          if (done) {
-            for (const part of buffer) controller.enqueue(part);
-            await this.recordSuccess(
-              current.candidate,
-              current.result.response?.headers,
-              usage,
-            );
-            controller.close();
-            return;
+          const { done: readDone, value } = await reader.read();
+          if (readDone) {
+            done = true;
+            break;
           }
-          const part = value;
-          if (part.type === 'error' && !contentStarted) {
+          if (value.type === 'error') {
             // Pre-content stream error: treat like a failed call so we
             // can fall back to the next model.
-            throw part.error;
+            throw value.error;
           }
-          if (part.type === 'finish') usage = part.usage;
-          if (!contentStarted && PRELUDE_PART_TYPES.has(part.type)) {
-            buffer.push(part);
+          if (value.type === 'finish') usage = value.usage;
+          if (PRELUDE_PART_TYPES.has(value.type)) {
+            prelude.push(value);
             continue;
           }
-          if (!contentStarted) {
-            contentStarted = true;
-            for (const buffered of buffer) controller.enqueue(buffered);
-            buffer = [];
-          }
-          controller.enqueue(part);
+          firstContent = value;
+          break;
         }
       } catch (error) {
         reader.cancel().catch(() => {});
-        if (contentStarted) {
-          // Errors after the first content chunk propagate unchanged.
-          controller.error(error);
-          return;
-        }
-        try {
-          await this.handleFailure(error, current.candidate, attempts, pending);
-          const next = await acquire();
-          await pump(next, controller);
-        } catch (finalError) {
-          controller.error(finalError);
-        }
+        // Rethrows fatal errors; otherwise fall through to next candidate.
+        await this.handleFailure(error, candidate, attempts, pending);
+        continue;
       }
-    };
 
-    const stream = new ReadableStream<LanguageModelV2StreamPart>({
-      start: (controller) => {
-        void pump(initial, controller);
-      },
-    });
+      // Committed: first content part arrived (or the stream finished).
+      // Errors from here on propagate to the consumer unchanged.
+      let preludeIndex = 0;
+      const stream = new ReadableStream<LanguageModelV2StreamPart>({
+        pull: async (controller) => {
+          if (preludeIndex < prelude.length) {
+            controller.enqueue(prelude[preludeIndex++]);
+            return;
+          }
+          if (firstContent !== undefined) {
+            const part = firstContent;
+            firstContent = undefined;
+            controller.enqueue(part);
+            return;
+          }
+          if (!done) {
+            const { done: readDone, value } = await reader.read();
+            if (!readDone) {
+              if (value.type === 'finish') usage = value.usage;
+              controller.enqueue(value);
+              return;
+            }
+            done = true;
+          }
+          await this.recordSuccess(candidate, result.response?.headers, usage);
+          controller.close();
+        },
+        cancel: (reason) => reader.cancel(reason),
+      });
 
-    return {
-      stream,
-      ...(initial.result.request !== undefined
-        ? { request: initial.result.request }
-        : {}),
-      ...(initial.result.response !== undefined
-        ? { response: initial.result.response }
-        : {}),
-    };
+      return {
+        stream,
+        ...(result.request !== undefined ? { request: result.request } : {}),
+        ...(result.response !== undefined ? { response: result.response } : {}),
+      };
+    }
   }
 }

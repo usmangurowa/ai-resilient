@@ -58,6 +58,6 @@
     "url": "git+https://github.com/usmangurowa/ai-resilient.git"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   }
 }

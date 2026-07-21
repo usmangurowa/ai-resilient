@@ -178,20 +178,22 @@ describe('ResilientLanguageModel doStream', () => {
     const primary = new MockLanguageModelV2({
       provider: 'mock-a',
       modelId: 'model-a',
-      doStream: async () => ({
-        stream: new ReadableStream<LanguageModelV2StreamPart>({
-          start(controller) {
-            controller.enqueue({ type: 'stream-start', warnings: [] });
-            controller.enqueue({ type: 'text-start', id: '1' });
-            controller.enqueue({
-              type: 'text-delta',
-              id: '1',
-              delta: 'partial',
-            });
-            controller.error(new Error('connection reset'));
-          },
-        }),
-      }),
+      doStream: async () => {
+        const parts: LanguageModelV2StreamPart[] = [
+          { type: 'stream-start', warnings: [] },
+          { type: 'text-start', id: '1' },
+          { type: 'text-delta', id: '1', delta: 'partial' },
+        ];
+        let i = 0;
+        return {
+          stream: new ReadableStream<LanguageModelV2StreamPart>({
+            pull(controller) {
+              if (i < parts.length) controller.enqueue(parts[i++]);
+              else controller.error(new Error('connection reset'));
+            },
+          }),
+        };
+      },
     });
     const secondary = new MockLanguageModelV2({
       provider: 'mock-b',
@@ -230,7 +232,7 @@ describe('ResilientLanguageModel doStream', () => {
     expect(secondary.doStreamCalls).toHaveLength(0);
   });
 
-  it('errors the stream with a fatal error from a pre-content error part', async () => {
+  it('rejects doStream with a fatal error from a pre-content error part', async () => {
     const primary = new MockLanguageModelV2({
       provider: 'mock-a',
       modelId: 'model-a',
@@ -249,14 +251,13 @@ describe('ResilientLanguageModel doStream', () => {
       models: [{ model: primary }, { model: secondary }],
     });
 
-    const { stream } = await model.doStream(callOptions);
-    await expect(readAllParts(stream)).rejects.toMatchObject({
+    await expect(model.doStream(callOptions)).rejects.toMatchObject({
       statusCode: 401,
     });
     expect(secondary.doStreamCalls).toHaveLength(0);
   });
 
-  it('errors the stream with AllModelsExhaustedError when every model fails pre-content', async () => {
+  it('rejects doStream with AllModelsExhaustedError when every model fails pre-content', async () => {
     const primary = new MockLanguageModelV2({
       provider: 'mock-a',
       modelId: 'model-a',
@@ -275,14 +276,74 @@ describe('ResilientLanguageModel doStream', () => {
       models: [{ model: primary }, { model: secondary }],
     });
 
-    const { stream } = await model.doStream(callOptions);
-    const error = await readAllParts(stream).catch((e: unknown) => e);
+    const error = await Promise.resolve(model.doStream(callOptions)).catch(
+      (e: unknown) => e,
+    );
     expect(AllModelsExhaustedError.isInstance(error)).toBe(true);
     const exhausted = error as AllModelsExhaustedError;
     expect(exhausted.attempts.map((a) => a.classification)).toEqual([
       'rate-limit',
       'transient',
     ]);
+  });
+
+  it('returns request/response metadata from the model that serves the stream', async () => {
+    const primary = new MockLanguageModelV2({
+      provider: 'mock-a',
+      modelId: 'model-a',
+      doStream: async () => ({
+        ...streamOf([
+          { type: 'stream-start', warnings: [] },
+          { type: 'error', error: apiError(429) },
+        ]),
+        response: { headers: { 'x-served-by': 'model-a' } },
+      }),
+    });
+    const secondary = new MockLanguageModelV2({
+      provider: 'mock-b',
+      modelId: 'model-b',
+      doStream: async () => ({
+        ...streamOf(textChunks('Hello from B')),
+        response: { headers: { 'x-served-by': 'model-b' } },
+      }),
+    });
+    const model = createResilient({
+      models: [{ model: primary }, { model: secondary }],
+    });
+
+    const result = await model.doStream(callOptions);
+    expect(result.response?.headers).toEqual({ 'x-served-by': 'model-b' });
+    const parts = await readAllParts(result.stream);
+    expect(
+      parts.filter((p) => p.type === 'text-delta').map((p) => p.delta),
+    ).toEqual(['Hello from B']);
+  });
+
+  it('forwards cancel to the underlying stream', async () => {
+    let cancelled: unknown;
+    const primary = new MockLanguageModelV2({
+      provider: 'mock-a',
+      modelId: 'model-a',
+      doStream: async () => ({
+        stream: new ReadableStream<LanguageModelV2StreamPart>({
+          start(controller) {
+            controller.enqueue({ type: 'stream-start', warnings: [] });
+            controller.enqueue({ type: 'text-start', id: '1' });
+            controller.enqueue({ type: 'text-delta', id: '1', delta: 'hi' });
+          },
+          cancel(reason) {
+            cancelled = reason;
+          },
+        }),
+      }),
+    });
+    const model = createResilient({ models: [{ model: primary }] });
+
+    const { stream } = await model.doStream(callOptions);
+    const reader = stream.getReader();
+    await reader.read();
+    await reader.cancel('user aborted');
+    expect(cancelled).toBe('user aborted');
   });
 
   it('benches a model after a pre-content stream rate limit', async () => {

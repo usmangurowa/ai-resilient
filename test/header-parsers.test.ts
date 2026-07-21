@@ -32,9 +32,10 @@ describe('parseRateLimitHeaders', () => {
     expect(parsed).toEqual({
       requestsLimit: 10000,
       requestsRemaining: 9998,
+      requestsResetMs: 8640,
       tokensLimit: 200000,
       tokensRemaining: 199866,
-      resetMs: 40,
+      tokensResetMs: 40,
     });
   });
 
@@ -46,7 +47,7 @@ describe('parseRateLimitHeaders', () => {
     });
     expect(parsed.requestsRemaining).toBe(2);
     expect(parsed.requestsLimit).toBe(30);
-    expect(parsed.resetMs).toBe(2000);
+    expect(parsed.requestsResetMs).toBe(2000);
   });
 
   it('parses Anthropic headers', () => {
@@ -63,8 +64,10 @@ describe('parseRateLimitHeaders', () => {
     expect(parsed.requestsRemaining).toBe(49);
     expect(parsed.tokensLimit).toBe(40000);
     expect(parsed.tokensRemaining).toBe(39000);
-    expect(parsed.resetMs).toBeGreaterThan(40_000);
-    expect(parsed.resetMs).toBeLessThanOrEqual(45_000);
+    expect(parsed.requestsResetMs).toBeGreaterThan(40_000);
+    expect(parsed.requestsResetMs).toBeLessThanOrEqual(45_000);
+    expect(parsed.tokensResetMs).toBeGreaterThan(40_000);
+    expect(parsed.tokensResetMs).toBeLessThanOrEqual(45_000);
   });
 
   it('is case-insensitive on header names', () => {
@@ -83,7 +86,7 @@ describe('parseRateLimitHeaders', () => {
     expect(parsed).toEqual({
       requestsLimit: 100,
       requestsRemaining: 10,
-      resetMs: 12_000,
+      requestsResetMs: 12_000,
     });
   });
 
@@ -109,7 +112,7 @@ describe('parseRateLimitHeaders', () => {
     expect(parsed).toEqual({
       requestsLimit: 15,
       requestsRemaining: 1,
-      resetMs: 40_000,
+      requestsResetMs: 40_000,
     });
   });
 
@@ -119,7 +122,7 @@ describe('parseRateLimitHeaders', () => {
       'anthropic-ratelimit-requests-remaining': '10',
       'anthropic-ratelimit-requests-reset': past,
     });
-    expect(parsed.resetMs).toBe(0);
+    expect(parsed.requestsResetMs).toBe(0);
   });
 
   it('prefers OpenAI-style headers for unknown providers when present', () => {
@@ -134,9 +137,10 @@ describe('parseRateLimitHeaders', () => {
     expect(parseRateLimitHeaders('openai.chat', {})).toEqual({
       requestsRemaining: undefined,
       requestsLimit: undefined,
+      requestsResetMs: undefined,
       tokensRemaining: undefined,
       tokensLimit: undefined,
-      resetMs: undefined,
+      tokensResetMs: undefined,
     });
   });
 });
