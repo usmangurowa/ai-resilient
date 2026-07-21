@@ -1,0 +1,66 @@
+{
+  "name": "ai-resilient",
+  "version": "0.1.0",
+  "description": "Smart model fallback for the Vercel AI SDK: reactive fallback on rate-limit/transient errors and proactive switching before limits are hit.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "prepublishOnly": "npm run typecheck && npm run lint && npm run format:check && npm run test && npm run build"
+  },
+  "peerDependencies": {
+    "@ai-sdk/provider": "^2.0.0",
+    "ai": "^5.0.0"
+  },
+  "devDependencies": {
+    "@ai-sdk/provider": "^2.0.0",
+    "@eslint/js": "^10.0.1",
+    "@vitest/coverage-v8": "^3.2.7",
+    "ai": "^5.0.0",
+    "eslint": "^10.7.0",
+    "eslint-config-prettier": "^10.1.8",
+    "msw": "^2.15.0",
+    "prettier": "^3.9.6",
+    "tsup": "^8.0.0",
+    "typescript": "^5.5.0",
+    "typescript-eslint": "^8.65.0",
+    "vitest": "^3.0.0",
+    "zod": "^4.0.0"
+  },
+  "keywords": [
+    "ai",
+    "vercel-ai-sdk",
+    "fallback",
+    "rate-limit",
+    "resilience",
+    "llm"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/usmangurowa/ai-resilient.git"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

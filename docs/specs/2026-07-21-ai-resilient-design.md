@@ -6,14 +6,14 @@
 
 ## Problem
 
-Developers using free-tier AI model API keys hit rate limits and quota exhaustion. When that happens, calls fail. Existing solutions (`ai-fallback`) only react *after* an error occurs and treat all errors the same. Vercel AI Gateway fallbacks require routing through Vercel's gateway rather than the developer's own API keys.
+Developers using free-tier AI model API keys hit rate limits and quota exhaustion. When that happens, calls fail. Existing solutions (`ai-fallback`) only react _after_ an error occurs and treat all errors the same. Vercel AI Gateway fallbacks require routing through Vercel's gateway rather than the developer's own API keys.
 
 ## Goal
 
 A wrapper SDK for the Vercel AI SDK (v5) that:
 
-1. **Reactively** falls back to the next configured model on rate-limit/quota/transient errors — but *not* on fatal errors (auth, bad request).
-2. **Proactively** tracks rate-limit state (from provider response headers and/or user-declared limits) and switches to a fallback model *before* the limit is hit.
+1. **Reactively** falls back to the next configured model on rate-limit/quota/transient errors — but _not_ on fatal errors (auth, bad request).
+2. **Proactively** tracks rate-limit state (from provider response headers and/or user-declared limits) and switches to a fallback model _before_ the limit is hit.
 
 ## Non-goals (v1)
 
@@ -34,10 +34,10 @@ const model = createResilient({
     { model: groq('llama-3.3-70b'), limits: { requestsPerMinute: 30 } },
     { model: google('gemini-2.0-flash') },
   ],
-  store: memoryStore(),        // default; pluggable (Redis/KV adapters)
-  threshold: 0.1,              // proactively skip a model when <10% of a known limit remains
-  cooldown: 60_000,            // ms to bench a model after a rate-limit error (default 60s)
-  onFallback: (info) => {},    // { from, to, reason: 'rate-limit' | 'transient' | 'proactive' }
+  store: memoryStore(), // default; pluggable (Redis/KV adapters)
+  threshold: 0.1, // proactively skip a model when <10% of a known limit remains
+  cooldown: 60_000, // ms to bench a model after a rate-limit error (default 60s)
+  onFallback: (info) => {}, // { from, to, reason: 'rate-limit' | 'transient' | 'proactive' }
   onError: (error, modelId) => {},
 });
 
@@ -96,16 +96,16 @@ interface Store {
 
 ## Error handling summary
 
-| Situation | Behavior |
-|---|---|
-| 429 / quota exceeded | Bench model (retry-after or cooldown), try next |
-| 5xx / overloaded / network | Try next model (no bench) |
-| 401 / 403 / 400 | Throw immediately |
-| Stream error before first chunk | Fall back, start fresh stream on next model |
-| Stream error after first chunk | Propagate to caller |
-| All models fail | `AllModelsExhaustedError` with per-model attempts |
-| All models near limit | Try all in order anyway |
-| Store unavailable | Assume available, skip recording |
+| Situation                       | Behavior                                          |
+| ------------------------------- | ------------------------------------------------- |
+| 429 / quota exceeded            | Bench model (retry-after or cooldown), try next   |
+| 5xx / overloaded / network      | Try next model (no bench)                         |
+| 401 / 403 / 400                 | Throw immediately                                 |
+| Stream error before first chunk | Fall back, start fresh stream on next model       |
+| Stream error after first chunk  | Propagate to caller                               |
+| All models fail                 | `AllModelsExhaustedError` with per-model attempts |
+| All models near limit           | Try all in order anyway                           |
+| Store unavailable               | Assume available, skip recording                  |
 
 ## Testing
 
