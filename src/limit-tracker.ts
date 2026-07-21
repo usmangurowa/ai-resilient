@@ -87,9 +87,10 @@ export class LimitTracker {
     const raw = await this.store.get(this.benchKey(modelKey));
     if (raw === null) return false;
     // Belt and braces for stores without real TTL support: the value is
-    // the bench expiry timestamp.
+    // the bench expiry timestamp. Unparseable values fail open (not
+    // benched), consistent with the store-failure policy in isAvailable.
     const expiresAt = Number(raw);
-    return !Number.isFinite(expiresAt) || Date.now() < expiresAt;
+    return Number.isFinite(expiresAt) && Date.now() < expiresAt;
   }
 
   private async isNearHeaderLimit(modelKey: string): Promise<boolean> {

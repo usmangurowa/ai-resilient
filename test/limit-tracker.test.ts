@@ -260,5 +260,13 @@ describe('LimitTracker', () => {
       ).resolves.toBeUndefined();
       await expect(tracker.recordRateLimit('m1')).resolves.toBeUndefined();
     });
+    it('treats an unparseable bench value as not benched', async () => {
+      const store: Store = {
+        get: async (key) => (key.includes(':bench:') ? 'garbage' : null),
+        set: async () => {},
+      };
+      const tracker = makeTracker({ store });
+      expect(await tracker.isAvailable('m1')).toBe(true);
+    });
   });
 });
