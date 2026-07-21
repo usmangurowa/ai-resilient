@@ -5,7 +5,7 @@ import { memoryStore } from './stores/memory';
 import type { ResilientOptions } from './types';
 
 export { AllModelsExhaustedError, type ModelAttempt } from './errors';
-export { classifyError } from './classify-error';
+export { classifyError, getRetryAfterMs } from './classify-error';
 export { memoryStore } from './stores/memory';
 export { LimitTracker } from './limit-tracker';
 export { parseRateLimitHeaders, type ParsedRateLimit } from './header-parsers';

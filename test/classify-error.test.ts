@@ -1,6 +1,6 @@
 import { APICallError } from '@ai-sdk/provider';
 import { describe, expect, it } from 'vitest';
-import { classifyError, getRetryAfterMs } from '../src/classify-error';
+import { classifyError, getRetryAfterMs } from '../src/index';
 
 function apiError(overrides: {
   statusCode?: number;

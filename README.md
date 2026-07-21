@@ -116,6 +116,20 @@ function redisStore(redis: Redis): Store {
 
 Store failures never break your calls: if the store throws, models are assumed available and recording is skipped.
 
+## API
+
+Beyond `createResilient`, these building blocks are exported:
+
+| Export                                                                                                                                           | Kind     | Purpose                                                                                                                                                     |
+| ------------------------------------------------------------------------------------------------------------------------------------------------ | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `memoryStore()`                                                                                                                                  | function | Default in-process `Store` with TTL eviction.                                                                                                               |
+| `AllModelsExhaustedError`                                                                                                                        | class    | Thrown when every model fails; has `attempts: ModelAttempt[]` and static `isInstance(error)`.                                                               |
+| `classifyError(error)`                                                                                                                           | function | Classify any error as `'rate-limit' \| 'transient' \| 'fatal'` — the same logic the fallback loop uses.                                                     |
+| `getRetryAfterMs(error)`                                                                                                                         | function | Parse a `retry-after` header (delta-seconds or HTTP-date) from an error's `responseHeaders` into milliseconds.                                              |
+| `parseRateLimitHeaders(provider, headers)`                                                                                                       | function | Parse provider rate-limit headers (OpenAI, Anthropic, Groq, Google, Mistral, IETF draft) into a normalized `ParsedRateLimit`.                               |
+| `LimitTracker`                                                                                                                                   | class    | The tracker behind proactive switching: bench state, header snapshots, sliding-window counters. Useful for custom orchestration on top of the same `Store`. |
+| `Store`, `Limits`, `ModelConfig`, `ResilientOptions`, `FallbackInfo`, `FallbackReason`, `ErrorClassification`, `ModelAttempt`, `ParsedRateLimit` | types    | Public types for the options and callbacks above.                                                                                                           |
+
 ## Scope (v1)
 
 Language models only. Not included: embeddings/image/speech models, mid-stream fallback (restarting after tokens were emitted), multi-key rotation, cost/latency-based routing.
