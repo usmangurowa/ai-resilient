@@ -85,6 +85,22 @@ function parseAnthropic(h: Headers): ParsedRateLimit {
 }
 
 /**
+ * `ratelimit-reset` is delta-seconds per the IETF draft, but some
+ * implementations send a Unix epoch timestamp. Values that would put the
+ * reset more than a year out are interpreted as epoch seconds.
+ */
+function parseIetfReset(value: string | undefined): number | undefined {
+  const reset = num(value);
+  if (reset === undefined) return undefined;
+  const YEAR_S = 31_536_000;
+  if (reset > YEAR_S) {
+    // Epoch seconds → delta from now, clamped to >= 0.
+    return Math.max(0, reset * 1000 - Date.now());
+  }
+  return reset * 1000;
+}
+
+/**
  * Best-effort parser for providers without a documented scheme
  * (Google, Mistral): tries OpenAI-style headers, then the IETF
  * draft `ratelimit-*` headers.
@@ -92,11 +108,11 @@ function parseAnthropic(h: Headers): ParsedRateLimit {
 function parseGeneric(h: Headers): ParsedRateLimit {
   const openai = parseOpenAIStyle(h);
   if (Object.values(openai).some((v) => v !== undefined)) return openai;
-  const reset = num(h['ratelimit-reset']);
+  const reset = parseIetfReset(h['ratelimit-reset']);
   return {
     requestsRemaining: num(h['ratelimit-remaining']),
     requestsLimit: num(h['ratelimit-limit']),
-    ...(reset !== undefined ? { requestsResetMs: reset * 1000 } : {}),
+    ...(reset !== undefined ? { requestsResetMs: reset } : {}),
   };
 }
 

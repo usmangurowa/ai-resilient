@@ -5,6 +5,8 @@ const MINUTE_MS = 60_000;
 const DAY_MS = 86_400_000;
 /** How long a parsed header snapshot stays relevant without a reset hint. */
 const DEFAULT_SNAPSHOT_TTL_MS = 60_000;
+/** Upper bound for header-snapshot lifetimes: garbage reset values must not pin a snapshot. */
+const MAX_SNAPSHOT_TTL_MS = DAY_MS;
 
 interface UsageState {
   /** Timestamps (ms) of requests within the last 24h. */
@@ -170,14 +172,24 @@ export class LimitTracker {
       snapshot.requests = {
         remaining: parsed.requestsRemaining,
         limit: parsed.requestsLimit,
-        expiresAt: now + (parsed.requestsResetMs ?? DEFAULT_SNAPSHOT_TTL_MS),
+        expiresAt:
+          now +
+          Math.min(
+            parsed.requestsResetMs ?? DEFAULT_SNAPSHOT_TTL_MS,
+            MAX_SNAPSHOT_TTL_MS,
+          ),
       };
     }
     if (parsed.tokensRemaining !== undefined) {
       snapshot.tokens = {
         remaining: parsed.tokensRemaining,
         limit: parsed.tokensLimit,
-        expiresAt: now + (parsed.tokensResetMs ?? DEFAULT_SNAPSHOT_TTL_MS),
+        expiresAt:
+          now +
+          Math.min(
+            parsed.tokensResetMs ?? DEFAULT_SNAPSHOT_TTL_MS,
+            MAX_SNAPSHOT_TTL_MS,
+          ),
       };
     }
     // Keep the snapshot around until the *slowest* dimension resets;

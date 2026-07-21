@@ -201,6 +201,21 @@ describe('LimitTracker', () => {
       vi.advanceTimersByTime(60_000);
       expect(await tracker.isAvailable('m1')).toBe(true);
     });
+    it('caps a snapshot with an absurd reset at 24h', async () => {
+      const tracker = makeTracker({ threshold: 0.1 });
+      // 31535999 seconds < YEAR_S so treated as delta (≈ 364.9 days in ms).
+      // The tracker must clamp to MAX_SNAPSHOT_TTL_MS (24h).
+      await tracker.recordSuccess('m1', {
+        provider: 'custom.chat',
+        headers: {
+          'ratelimit-remaining': '0',
+          'ratelimit-reset': '31535999',
+        },
+      });
+      expect(await tracker.isAvailable('m1')).toBe(false);
+      vi.advanceTimersByTime(86_400_001);
+      expect(await tracker.isAvailable('m1')).toBe(true);
+    });
   });
 
   describe('concurrent usage recording', () => {

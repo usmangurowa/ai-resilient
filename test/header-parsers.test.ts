@@ -125,6 +125,25 @@ describe('parseRateLimitHeaders', () => {
     expect(parsed.requestsResetMs).toBe(0);
   });
 
+  it('interprets epoch-seconds ratelimit-reset as a delta from now', () => {
+    const epochReset = String(Math.floor(Date.now() / 1000) + 120);
+    const parsed = parseRateLimitHeaders('mistral.chat', {
+      'ratelimit-remaining': '0',
+      'ratelimit-reset': epochReset,
+    });
+    expect(parsed.requestsResetMs).toBeGreaterThan(100_000);
+    expect(parsed.requestsResetMs).toBeLessThanOrEqual(120_000);
+  });
+
+  it('clamps past epoch ratelimit-reset to zero', () => {
+    const epochPast = String(Math.floor(Date.now() / 1000) - 60);
+    const parsed = parseRateLimitHeaders('mistral.chat', {
+      'ratelimit-remaining': '0',
+      'ratelimit-reset': epochPast,
+    });
+    expect(parsed.requestsResetMs).toBe(0);
+  });
+
   it('prefers OpenAI-style headers for unknown providers when present', () => {
     const parsed = parseRateLimitHeaders('google.generative-ai', {
       'x-ratelimit-remaining-requests': '3',
