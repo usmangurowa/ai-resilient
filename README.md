@@ -1,6 +1,44 @@
 # ai-resilient
 
+[![npm version](https://img.shields.io/npm/v/ai-resilient.svg)](https://www.npmjs.com/package/ai-resilient)
+[![CI](https://github.com/usmangurowa/ai-resilient/actions/workflows/ci.yml/badge.svg)](https://github.com/usmangurowa/ai-resilient/actions/workflows/ci.yml)
+[![npm downloads](https://img.shields.io/npm/dm/ai-resilient.svg)](https://www.npmjs.com/package/ai-resilient)
+[![zero dependencies](https://img.shields.io/badge/dependencies-0-brightgreen.svg)](https://www.npmjs.com/package/ai-resilient?activeTab=dependencies)
+[![license](https://img.shields.io/npm/l/ai-resilient.svg)](https://github.com/usmangurowa/ai-resilient/blob/main/LICENSE)
+
 Smart model fallback for the [Vercel AI SDK](https://ai-sdk.dev) (v5 and v6).
+
+## Why
+
+Your primary model _will_ hit a 429 in production. The usual fix looks like this:
+
+```ts
+// ❌ repeated at every call site, loses streaming, retries fatal errors too
+try {
+  return await generateText({ model: groq('llama-3.3-70b'), prompt });
+} catch {
+  return await generateText({ model: openai('gpt-4o-mini'), prompt });
+}
+```
+
+`ai-resilient` replaces that with one drop-in model:
+
+```ts
+const model = createResilient({
+  models: [
+    { model: groq('llama-3.3-70b-versatile') },
+    { model: openai('gpt-4o-mini') },
+  ],
+});
+// use it everywhere generateText / streamText / generateObject / streamObject accept a model
+```
+
+…and it's smarter than a try/catch:
+
+- knows which errors are worth falling back on (429/5xx/network) vs fatal (400/401/403 → throw immediately),
+- **benches** rate-limited models for `retry-after` so the next request doesn't waste a call on them,
+- **proactively switches** _before_ you hit the limit by reading provider rate-limit headers,
+- falls back mid-`streamText` — but only before the first content chunk, so users never see spliced output.
 
 `ai-resilient` wraps a chain of language models in a single `LanguageModelV2` that:
 
