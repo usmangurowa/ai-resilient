@@ -1,6 +1,6 @@
 {
   "name": "ai-resilient",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Smart model fallback for the Vercel AI SDK: reactive fallback on rate-limit/transient errors and proactive switching before limits are hit.",
   "license": "MIT",
   "type": "module",
@@ -30,8 +30,8 @@
     "prepublishOnly": "npm run typecheck && npm run lint && npm run format:check && npm run test && npm run build"
   },
   "peerDependencies": {
-    "@ai-sdk/provider": "^2.0.0",
-    "ai": "^5.0.0"
+    "@ai-sdk/provider": "^2.0.0 || ^3.0.0",
+    "ai": "^5.0.0 || ^6.0.0"
   },
   "devDependencies": {
     "@ai-sdk/provider": "^2.0.0",

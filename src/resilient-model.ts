@@ -2,12 +2,17 @@ import type {
   LanguageModelV2,
   LanguageModelV2CallOptions,
   LanguageModelV2StreamPart,
-  LanguageModelV2Usage,
 } from '@ai-sdk/provider';
 import { classifyError, getRetryAfterMs } from './classify-error';
 import { AllModelsExhaustedError, type ModelAttempt } from './errors';
 import { LimitTracker } from './limit-tracker';
-import type { FallbackReason, ModelConfig, ResilientOptions } from './types';
+import type {
+  AnyLanguageModel,
+  FallbackReason,
+  ModelConfig,
+  ResilientOptions,
+  SpecificationVersion,
+} from './types';
 
 type DoGenerateResult = Awaited<ReturnType<LanguageModelV2['doGenerate']>>;
 type DoStreamResult = Awaited<ReturnType<LanguageModelV2['doStream']>>;
@@ -32,12 +37,41 @@ interface PendingFallback {
 const PRELUDE_PART_TYPES = new Set(['stream-start', 'response-metadata']);
 
 /**
- * A `LanguageModelV2` that transparently falls back across a chain of
- * models on rate-limit and transient errors, and proactively skips
- * models that are near a known rate limit.
+ * Extract a token count from a usage field that may be a v2 flat number
+ * or a v3 nested `{ total: number }` object.
  */
-export class ResilientLanguageModel implements LanguageModelV2 {
-  readonly specificationVersion = 'v2' as const;
+function tokenCount(value: unknown): number | undefined {
+  if (typeof value === 'number') return value;
+  if (typeof value === 'object' && value !== null) {
+    const total = (value as { total?: unknown }).total;
+    if (typeof total === 'number') return total;
+  }
+  return undefined;
+}
+
+/**
+ * Total token usage from either a `LanguageModelV2Usage` (flat numbers,
+ * top-level `totalTokens`) or a `LanguageModelV3Usage` (nested
+ * `inputTokens.total` / `outputTokens.total`, no top-level total).
+ */
+function extractTotalTokens(usage: unknown): number | undefined {
+  if (typeof usage !== 'object' || usage === null) return undefined;
+  const u = usage as Record<string, unknown>;
+  const total = tokenCount(u.totalTokens);
+  if (total !== undefined) return total;
+  const input = tokenCount(u.inputTokens);
+  const output = tokenCount(u.outputTokens);
+  if (input === undefined && output === undefined) return undefined;
+  return (input ?? 0) + (output ?? 0);
+}
+
+/**
+ * A resilient language model that transparently falls back across a
+ * chain of models on rate-limit and transient errors, and proactively
+ * skips models that are near a known rate limit. Mirrors the spec
+ * version (v2 or v3) of the models it wraps.
+ */
+export class ResilientLanguageModel {
   readonly provider = 'ai-resilient';
 
   private readonly candidates: Candidate[];
@@ -62,6 +96,17 @@ export class ResilientLanguageModel implements LanguageModelV2 {
     if (options.models.length === 0) {
       throw new Error('ai-resilient: at least one model is required');
     }
+    const versions = new Set(
+      options.models.map((config) => config.model.specificationVersion),
+    );
+    if (versions.size > 1) {
+      // The outer specificationVersion drives how the AI SDK adapts call
+      // options and results, so all wrapped models must speak the same
+      // spec — a mixed chain would corrupt the fallback path.
+      throw new Error(
+        `ai-resilient: all models must implement the same specification version; got ${[...versions].sort().join(', ')}`,
+      );
+    }
     const seen = new Map<string, number>();
     this.candidates = options.models.map((config) => {
       const base = `${config.model.provider}:${config.model.modelId}`;
@@ -74,15 +119,24 @@ export class ResilientLanguageModel implements LanguageModelV2 {
     this.onError = options.onError;
   }
 
+  /**
+   * Reported dynamically from the wrapped models: hardcoding 'v2' would
+   * make ai v6 wrap this model in its v2→v3 compat adapter and
+   * double-convert the already-v3 results passed through unchanged.
+   */
+  get specificationVersion(): SpecificationVersion {
+    return this.primary.specificationVersion;
+  }
+
   get modelId(): string {
     return this.primary.modelId;
   }
 
-  get supportedUrls(): LanguageModelV2['supportedUrls'] {
+  get supportedUrls(): AnyLanguageModel['supportedUrls'] {
     return this.primary.supportedUrls;
   }
 
-  private get primary(): LanguageModelV2 {
+  private get primary(): AnyLanguageModel {
     // candidates is non-empty by construction
     return this.candidates[0]!.config.model;
   }
@@ -90,7 +144,7 @@ export class ResilientLanguageModel implements LanguageModelV2 {
   private queueRecordSuccess(
     candidate: Candidate,
     headers: Record<string, string> | undefined,
-    usage: LanguageModelV2Usage | undefined,
+    usage: unknown,
   ): void {
     this.pendingRecords = this.pendingRecords
       .then(() => this.recordSuccess(candidate, headers, usage))
@@ -151,13 +205,9 @@ export class ResilientLanguageModel implements LanguageModelV2 {
   private async recordSuccess(
     candidate: Candidate,
     headers: Record<string, string> | undefined,
-    usage: LanguageModelV2Usage | undefined,
+    usage: unknown,
   ): Promise<void> {
-    const totalTokens =
-      usage?.totalTokens ??
-      (usage?.inputTokens !== undefined || usage?.outputTokens !== undefined
-        ? (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0)
-        : undefined);
+    const totalTokens = extractTotalTokens(usage);
     await this.tracker.recordSuccess(candidate.key, {
       provider: candidate.config.model.provider,
       headers,
@@ -182,7 +232,9 @@ export class ResilientLanguageModel implements LanguageModelV2 {
       }
       this.fireFallbacks(pending, modelId);
       try {
-        const result = await candidate.config.model.doGenerate(options);
+        const result = (await candidate.config.model.doGenerate(
+          options,
+        )) as DoGenerateResult;
         this.queueRecordSuccess(
           candidate,
           result.response?.headers,
@@ -216,7 +268,9 @@ export class ResilientLanguageModel implements LanguageModelV2 {
         }
         this.fireFallbacks(pending, modelId);
         try {
-          const result = await candidate.config.model.doStream(options);
+          const result = (await candidate.config.model.doStream(
+            options,
+          )) as DoStreamResult;
           return { candidate, result };
         } catch (error) {
           await this.handleFailure(error, candidate, attempts, pending);
@@ -233,7 +287,7 @@ export class ResilientLanguageModel implements LanguageModelV2 {
       const reader = result.stream.getReader();
       const prelude: LanguageModelV2StreamPart[] = [];
       let firstContent: LanguageModelV2StreamPart | undefined;
-      let usage: LanguageModelV2Usage | undefined;
+      let usage: unknown;
       let done = false;
 
       try {
