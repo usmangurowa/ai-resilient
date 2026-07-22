@@ -50,11 +50,24 @@
   },
   "keywords": [
     "ai",
+    "ai-sdk",
     "vercel-ai-sdk",
+    "vercel",
     "fallback",
+    "failover",
     "rate-limit",
+    "429",
+    "retry",
     "resilience",
-    "llm"
+    "llm",
+    "openai",
+    "anthropic",
+    "groq",
+    "gemini",
+    "mistral",
+    "generatetext",
+    "streamtext",
+    "language-model"
   ],
   "repository": {
     "type": "git",
