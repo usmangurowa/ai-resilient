@@ -1,5 +1,6 @@
 import { APICallError } from '@ai-sdk/provider';
 import type {
+  LanguageModelV2,
   LanguageModelV2CallOptions,
   LanguageModelV2StreamPart,
 } from '@ai-sdk/provider';
@@ -69,7 +70,7 @@ describe('ResilientLanguageModel doStream', () => {
       modelId: 'model-b',
       doStream: async () => streamOf(textChunks('Hello from B')),
     });
-    const model = createResilient({
+    const model: LanguageModelV2 = createResilient({
       models: [{ model: primary }, { model: secondary }],
     });
 
@@ -92,7 +93,7 @@ describe('ResilientLanguageModel doStream', () => {
       modelId: 'model-b',
       doStream: async () => streamOf(textChunks('Hello from B')),
     });
-    const model = createResilient({
+    const model: LanguageModelV2 = createResilient({
       models: [{ model: primary }, { model: secondary }],
       onFallback: (info) => fallbacks.push(info),
     });
@@ -120,7 +121,7 @@ describe('ResilientLanguageModel doStream', () => {
       modelId: 'model-b',
       doStream: async () => streamOf(textChunks('Hello from B')),
     });
-    const model = createResilient({
+    const model: LanguageModelV2 = createResilient({
       models: [{ model: primary }, { model: secondary }],
       onFallback: (info) => fallbacks.push(info),
     });
@@ -158,7 +159,7 @@ describe('ResilientLanguageModel doStream', () => {
       modelId: 'model-b',
       doStream: async () => streamOf(textChunks('Hello from B')),
     });
-    const model = createResilient({
+    const model: LanguageModelV2 = createResilient({
       models: [{ model: primary }, { model: secondary }],
     });
 
@@ -200,7 +201,7 @@ describe('ResilientLanguageModel doStream', () => {
       modelId: 'model-b',
       doStream: async () => streamOf(textChunks('Hello from B')),
     });
-    const model = createResilient({
+    const model: LanguageModelV2 = createResilient({
       models: [{ model: primary }, { model: secondary }],
     });
 
@@ -222,7 +223,7 @@ describe('ResilientLanguageModel doStream', () => {
       modelId: 'model-b',
       doStream: async () => streamOf(textChunks('Hello from B')),
     });
-    const model = createResilient({
+    const model: LanguageModelV2 = createResilient({
       models: [{ model: primary }, { model: secondary }],
     });
 
@@ -247,7 +248,7 @@ describe('ResilientLanguageModel doStream', () => {
       modelId: 'model-b',
       doStream: async () => streamOf(textChunks('Hello from B')),
     });
-    const model = createResilient({
+    const model: LanguageModelV2 = createResilient({
       models: [{ model: primary }, { model: secondary }],
     });
 
@@ -272,7 +273,7 @@ describe('ResilientLanguageModel doStream', () => {
       modelId: 'model-b',
       doStream: async () => streamOf([{ type: 'error', error: apiError(503) }]),
     });
-    const model = createResilient({
+    const model: LanguageModelV2 = createResilient({
       models: [{ model: primary }, { model: secondary }],
     });
 
@@ -307,7 +308,7 @@ describe('ResilientLanguageModel doStream', () => {
         response: { headers: { 'x-served-by': 'model-b' } },
       }),
     });
-    const model = createResilient({
+    const model: LanguageModelV2 = createResilient({
       models: [{ model: primary }, { model: secondary }],
     });
 
@@ -337,7 +338,9 @@ describe('ResilientLanguageModel doStream', () => {
         }),
       }),
     });
-    const model = createResilient({ models: [{ model: primary }] });
+    const model: LanguageModelV2 = createResilient({
+      models: [{ model: primary }],
+    });
 
     const { stream } = await model.doStream(callOptions);
     const reader = stream.getReader();
@@ -359,7 +362,7 @@ describe('ResilientLanguageModel doStream', () => {
       modelId: 'model-b',
       doStream: async () => streamOf(textChunks('Hello from B')),
     });
-    const model = createResilient({
+    const model: LanguageModelV2 = createResilient({
       models: [{ model: primary }, { model: secondary }],
       cooldown: 60_000,
     });

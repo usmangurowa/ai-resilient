@@ -1,6 +1,6 @@
 # ai-resilient
 
-Smart model fallback for the [Vercel AI SDK](https://ai-sdk.dev) (v5).
+Smart model fallback for the [Vercel AI SDK](https://ai-sdk.dev) (v5 and v6).
 
 `ai-resilient` wraps a chain of language models in a single `LanguageModelV2` that:
 
@@ -15,7 +15,9 @@ Works transparently with `generateText`, `streamText`, `generateObject`, and `st
 npm install ai-resilient ai
 ```
 
-`ai` (v5) and `@ai-sdk/provider` are peer dependencies (`@ai-sdk/provider` ships with `ai`, so most package managers install it automatically). `ai-resilient` has zero runtime dependencies.
+`ai` (v5 or v6) and `@ai-sdk/provider` are peer dependencies (`@ai-sdk/provider` ships with `ai`, so most package managers install it automatically). `ai-resilient` has zero runtime dependencies.
+
+The returned model mirrors the specification version of the models it wraps — `LanguageModelV2` on ai v5, `LanguageModelV3` on ai v6 — so it plugs into `generateText`/`streamText`/`generateObject`/`streamObject` on either major. All models in one chain must come from the same SDK major; mixing throws at construction.
 
 ## Usage
 
