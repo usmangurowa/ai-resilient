@@ -9,19 +9,21 @@ export interface Limits {
 }
 
 /** Language model specification versions the wrapper supports. */
-export type SpecificationVersion = 'v2' | 'v3';
+export type SpecificationVersion = 'v2' | 'v3' | 'v4';
 
 /**
- * Structural stand-in for a language model of either specification
- * version (`LanguageModelV2` from ai v5 / provider v2, `LanguageModelV3`
- * from ai v6 / provider v3).
+ * Structural stand-in for a language model of any supported
+ * specification version (`LanguageModelV2` from ai v5 / provider v2,
+ * `LanguageModelV3` from ai v6 / provider v3, `LanguageModelV4` from
+ * ai v7 / provider v4).
  *
- * `LanguageModelV3` is deliberately not imported from `@ai-sdk/provider`:
- * the type only exists in provider v3, so importing it would break
- * type-checking for consumers still on provider v2. TypeScript's
- * structural typing makes real models of both versions assignable to
- * this shape, and values of this shape assignable to the concrete
- * `LanguageModelV2` / `LanguageModelV3` interfaces.
+ * `LanguageModelV3` / `LanguageModelV4` are deliberately not imported
+ * from `@ai-sdk/provider`: those types only exist in provider v3/v4, so
+ * importing them would break type-checking for consumers still on
+ * provider v2. TypeScript's structural typing makes real models of all
+ * versions assignable to this shape, and values of this shape assignable
+ * to the concrete `LanguageModelV2` / `LanguageModelV3` /
+ * `LanguageModelV4` interfaces.
  */
 export interface AnyLanguageModel<
   Version extends SpecificationVersion = SpecificationVersion,
@@ -73,6 +75,34 @@ export interface FallbackInfo {
 export interface Store {
   get(key: string): Promise<string | null>;
   set(key: string, value: string, ttlMs?: number): Promise<void>;
+}
+
+/** Point-in-time status of one model in the chain. */
+export interface ModelStatus {
+  /** Store key: `provider:modelId` (with `#<n>` suffix on duplicates). */
+  key: string;
+  provider: string;
+  modelId: string;
+  /** False when benched or proactively near a limit — mirrors routing. */
+  available: boolean;
+  /** Present only while benched: epoch ms when the bench expires. */
+  benchedUntil?: number;
+  /** Present when a provider header snapshot is active for a dimension. */
+  headerLimits?: {
+    requests?: { remaining: number; limit?: number; resetsAt: number };
+    tokens?: { remaining: number; limit?: number; resetsAt: number };
+  };
+  /** Present when the model has declared `limits`: self-counted usage. */
+  selfCounted?: {
+    requestsLastMinute: number;
+    requestsLastDay: number;
+    tokensLastMinute: number;
+  };
+}
+
+/** Snapshot returned by `resilientStatus`. */
+export interface ResilientStatus {
+  models: ModelStatus[];
 }
 
 /** Options for {@link createResilient}. */

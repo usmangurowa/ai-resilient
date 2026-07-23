@@ -4,6 +4,7 @@ import { memoryStore } from './stores/memory';
 import type {
   AnyLanguageModel,
   ResilientOptions,
+  ResilientStatus,
   SpecificationVersion,
 } from './types';
 
@@ -19,7 +20,9 @@ export type {
   FallbackReason,
   Limits,
   ModelConfig,
+  ModelStatus,
   ResilientOptions,
+  ResilientStatus,
   SpecificationVersion,
   Store,
 } from './types';
@@ -34,9 +37,9 @@ const DEFAULT_COOLDOWN_MS = 60_000;
  *
  * The returned model mirrors the specification version of the models it
  * wraps — `LanguageModelV2` for ai v5 models, `LanguageModelV3` for
- * ai v6 models — so it works with `generateText`, `streamText`,
- * `generateObject`, and `streamObject` on either SDK major. Mixing spec
- * versions in one chain throws.
+ * ai v6 models, `LanguageModelV4` for ai v7 models — so it works with
+ * `generateText`, `streamText`, `generateObject`, and `streamObject` on
+ * any of those SDK majors. Mixing spec versions in one chain throws.
  */
 export function createResilient<Version extends SpecificationVersion>(
   options: ResilientOptions<Version>,
@@ -54,4 +57,20 @@ export function createResilient<Version extends SpecificationVersion>(
       : {}),
     ...(options.onError !== undefined ? { onError: options.onError } : {}),
   }) as unknown as AnyLanguageModel<Version>;
+}
+
+/**
+ * Read-only snapshot of a resilient model's per-model state: bench
+ * timers, header-derived limits, self-counted usage. Never throws on
+ * store failure; degrades to "available, no detail".
+ */
+export function resilientStatus(
+  model: AnyLanguageModel,
+): Promise<ResilientStatus> {
+  if (!(model instanceof ResilientLanguageModel)) {
+    throw new TypeError(
+      'ai-resilient: resilientStatus expects a model created by createResilient',
+    );
+  }
+  return model.status();
 }

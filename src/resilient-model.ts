@@ -11,6 +11,7 @@ import type {
   FallbackReason,
   ModelConfig,
   ResilientOptions,
+  ResilientStatus,
   SpecificationVersion,
 } from './types';
 
@@ -34,7 +35,14 @@ interface PendingFallback {
   reason: FallbackReason;
 }
 
-const PRELUDE_PART_TYPES = new Set(['stream-start', 'response-metadata']);
+// Stream parts that carry no user-visible content: safe to buffer while
+// deciding whether to commit to a candidate. `raw` (provider v4) mirrors
+// raw provider chunks and is not consumer-visible content either.
+const PRELUDE_PART_TYPES = new Set([
+  'stream-start',
+  'response-metadata',
+  'raw',
+]);
 
 /**
  * Extract a token count from a usage field that may be a v2 flat number
@@ -51,8 +59,9 @@ function tokenCount(value: unknown): number | undefined {
 
 /**
  * Total token usage from either a `LanguageModelV2Usage` (flat numbers,
- * top-level `totalTokens`) or a `LanguageModelV3Usage` (nested
- * `inputTokens.total` / `outputTokens.total`, no top-level total).
+ * top-level `totalTokens`) or a `LanguageModelV3Usage` /
+ * `LanguageModelV4Usage` (same nested shape: `inputTokens.total` /
+ * `outputTokens.total`, no top-level total).
  */
 function extractTotalTokens(usage: unknown): number | undefined {
   if (typeof usage !== 'object' || usage === null) return undefined;
@@ -69,7 +78,7 @@ function extractTotalTokens(usage: unknown): number | undefined {
  * A resilient language model that transparently falls back across a
  * chain of models on rate-limit and transient errors, and proactively
  * skips models that are near a known rate limit. Mirrors the spec
- * version (v2 or v3) of the models it wraps.
+ * version (v2, v3, or v4) of the models it wraps.
  */
 export class ResilientLanguageModel {
   readonly provider = 'ai-resilient';
@@ -214,6 +223,25 @@ export class ResilientLanguageModel {
       totalTokens,
       limits: candidate.config.limits,
     });
+  }
+
+  /**
+   * Read-only snapshot of per-model state: bench timers, header-derived
+   * limits, self-counted usage. Awaits pending bookkeeping writes first
+   * so the snapshot reflects all prior calls (read-your-writes), same
+   * as buildPlan. Never throws on store failure.
+   */
+  async status(): Promise<ResilientStatus> {
+    await this.pendingRecords;
+    const models = await Promise.all(
+      this.candidates.map(async (candidate) => ({
+        key: candidate.key,
+        provider: candidate.config.model.provider,
+        modelId: candidate.config.model.modelId,
+        ...(await this.tracker.status(candidate.key, candidate.config.limits)),
+      })),
+    );
+    return { models };
   }
 
   async doGenerate(

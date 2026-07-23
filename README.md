@@ -6,7 +6,7 @@
 [![zero dependencies](https://img.shields.io/badge/dependencies-0-brightgreen.svg)](https://www.npmjs.com/package/ai-resilient?activeTab=dependencies)
 [![license](https://img.shields.io/npm/l/ai-resilient.svg)](https://github.com/usmangurowa/ai-resilient/blob/main/LICENSE)
 
-Smart model fallback for the [Vercel AI SDK](https://ai-sdk.dev) (v5 and v6).
+Smart model fallback for the [Vercel AI SDK](https://ai-sdk.dev) (v5, v6, and v7).
 
 ## Why
 
@@ -53,9 +53,9 @@ Works transparently with `generateText`, `streamText`, `generateObject`, and `st
 npm install ai-resilient ai
 ```
 
-`ai` (v5 or v6) and `@ai-sdk/provider` are peer dependencies (`@ai-sdk/provider` ships with `ai`, so most package managers install it automatically). `ai-resilient` has zero runtime dependencies.
+`ai` (v5, v6, or v7) and `@ai-sdk/provider` are peer dependencies (`@ai-sdk/provider` ships with `ai`, so most package managers install it automatically). `ai-resilient` has zero runtime dependencies. Note that ai v7 itself requires Node 22+ and is ESM-only — a constraint of ai v7, not of ai-resilient.
 
-The returned model mirrors the specification version of the models it wraps — `LanguageModelV2` on ai v5, `LanguageModelV3` on ai v6 — so it plugs into `generateText`/`streamText`/`generateObject`/`streamObject` on either major. All models in one chain must come from the same SDK major; mixing throws at construction.
+The returned model mirrors the specification version of the models it wraps — `LanguageModelV2` on ai v5, `LanguageModelV3` on ai v6, `LanguageModelV4` on ai v7 — so it plugs into `generateText`/`streamText`/`generateObject`/`streamObject` on any of those majors. All models in one chain must come from the same SDK major; mixing throws at construction.
 
 ## Usage
 
@@ -124,9 +124,43 @@ try {
 }
 ```
 
+### Inspecting status
+
+`resilientStatus` returns a read-only snapshot of the same state the routing decisions use — which models are benched (and until when), header-derived limits, and self-counted usage. It never throws on store failure; it degrades to "available, no detail".
+
+```ts
+import { resilientStatus } from 'ai-resilient';
+
+const status = await resilientStatus(model);
+// status.models → [{ modelId, available, benchedUntil?, headerLimits?, selfCounted? }, ...]
+```
+
 ## Custom stores
 
-The default `memoryStore()` keeps state in-process, which suits long-running servers. For serverless deployments, plug in any store implementing:
+The default `memoryStore()` keeps state in-process, which suits long-running servers. For serverless deployments (Vercel, Netlify, Lambda), each invocation gets a fresh process, so use one of the first-party Redis adapters instead:
+
+```ts
+import { Redis } from '@upstash/redis';
+import { upstashStore } from 'ai-resilient/upstash';
+
+const model = createResilient({ models, store: upstashStore(Redis.fromEnv()) });
+```
+
+```ts
+import { Redis } from 'ioredis';
+import { redisStore } from 'ai-resilient/redis';
+
+const model = createResilient({
+  models,
+  store: redisStore(
+    new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379'),
+  ),
+});
+```
+
+The client packages (`@upstash/redis`, `ioredis`) are optional peer dependencies — install the one you use. The adapters accept an existing client and never create or close connections. One caveat for distributed setups: self-counted sliding-window limits are best-effort across concurrent serverless instances (last-write-wins on the usage window); bench state and header snapshots are unaffected.
+
+For other backends, plug in any store implementing:
 
 ```ts
 interface Store {
@@ -135,7 +169,7 @@ interface Store {
 }
 ```
 
-Example Redis adapter (using `ioredis`):
+Example hand-rolled adapter (using `ioredis`):
 
 ```ts
 import Redis from 'ioredis';
@@ -160,15 +194,17 @@ Store failures never break your calls: if the store throws, models are assumed a
 
 Beyond `createResilient`, these building blocks are exported:
 
-| Export                                                                                                                                           | Kind     | Purpose                                                                                                                                                     |
-| ------------------------------------------------------------------------------------------------------------------------------------------------ | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `memoryStore()`                                                                                                                                  | function | Default in-process `Store` with TTL eviction.                                                                                                               |
-| `AllModelsExhaustedError`                                                                                                                        | class    | Thrown when every model fails; has `attempts: ModelAttempt[]` and static `isInstance(error)`.                                                               |
-| `classifyError(error)`                                                                                                                           | function | Classify any error as `'rate-limit' \| 'transient' \| 'fatal'` — the same logic the fallback loop uses.                                                     |
-| `getRetryAfterMs(error)`                                                                                                                         | function | Parse a `retry-after` header (delta-seconds or HTTP-date) from an error's `responseHeaders` into milliseconds.                                              |
-| `parseRateLimitHeaders(provider, headers)`                                                                                                       | function | Parse provider rate-limit headers (OpenAI, Anthropic, Groq, Google, Mistral, IETF draft) into a normalized `ParsedRateLimit`.                               |
-| `LimitTracker`                                                                                                                                   | class    | The tracker behind proactive switching: bench state, header snapshots, sliding-window counters. Useful for custom orchestration on top of the same `Store`. |
-| `Store`, `Limits`, `ModelConfig`, `ResilientOptions`, `FallbackInfo`, `FallbackReason`, `ErrorClassification`, `ModelAttempt`, `ParsedRateLimit` | types    | Public types for the options and callbacks above.                                                                                                           |
+| Export                                                                                                                                           | Kind     | Purpose                                                                                                                                                        |
+| ------------------------------------------------------------------------------------------------------------------------------------------------ | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `memoryStore()`                                                                                                                                  | function | Default in-process `Store` with TTL eviction.                                                                                                                  |
+| `AllModelsExhaustedError`                                                                                                                        | class    | Thrown when every model fails; has `attempts: ModelAttempt[]` and static `isInstance(error)`.                                                                  |
+| `classifyError(error)`                                                                                                                           | function | Classify any error as `'rate-limit' \| 'transient' \| 'fatal'` — the same logic the fallback loop uses.                                                        |
+| `getRetryAfterMs(error)`                                                                                                                         | function | Parse a `retry-after` header (delta-seconds or HTTP-date) from an error's `responseHeaders` into milliseconds.                                                 |
+| `parseRateLimitHeaders(provider, headers)`                                                                                                       | function | Parse provider rate-limit headers (OpenAI, Anthropic, Groq, Google, Mistral, IETF draft) into a normalized `ParsedRateLimit`.                                  |
+| `LimitTracker`                                                                                                                                   | class    | The tracker behind proactive switching: bench state, header snapshots, sliding-window counters. Useful for custom orchestration on top of the same `Store`.    |
+| `resilientStatus(model)`                                                                                                                         | function | Read-only per-model status snapshot (bench timers, header limits, self-counted usage) for a model created by `createResilient`. Never throws on store failure. |
+| `ResilientStatus`, `ModelStatus`                                                                                                                 | types    | The snapshot shape returned by `resilientStatus` and its per-model entries.                                                                                    |
+| `Store`, `Limits`, `ModelConfig`, `ResilientOptions`, `FallbackInfo`, `FallbackReason`, `ErrorClassification`, `ModelAttempt`, `ParsedRateLimit` | types    | Public types for the options and callbacks above.                                                                                                              |
 
 ## Scope (v1)
 
