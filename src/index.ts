@@ -4,6 +4,7 @@ import { memoryStore } from './stores/memory';
 import type {
   AnyLanguageModel,
   ResilientOptions,
+  ResilientStatus,
   SpecificationVersion,
 } from './types';
 
@@ -19,7 +20,9 @@ export type {
   FallbackReason,
   Limits,
   ModelConfig,
+  ModelStatus,
   ResilientOptions,
+  ResilientStatus,
   SpecificationVersion,
   Store,
 } from './types';
@@ -54,4 +57,20 @@ export function createResilient<Version extends SpecificationVersion>(
       : {}),
     ...(options.onError !== undefined ? { onError: options.onError } : {}),
   }) as unknown as AnyLanguageModel<Version>;
+}
+
+/**
+ * Read-only snapshot of a resilient model's per-model state: bench
+ * timers, header-derived limits, self-counted usage. Never throws on
+ * store failure; degrades to "available, no detail".
+ */
+export function resilientStatus(
+  model: AnyLanguageModel,
+): Promise<ResilientStatus> {
+  if (!(model instanceof ResilientLanguageModel)) {
+    throw new TypeError(
+      'ai-resilient: resilientStatus expects a model created by createResilient',
+    );
+  }
+  return model.status();
 }

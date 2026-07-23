@@ -77,6 +77,34 @@ export interface Store {
   set(key: string, value: string, ttlMs?: number): Promise<void>;
 }
 
+/** Point-in-time status of one model in the chain. */
+export interface ModelStatus {
+  /** Store key: `provider:modelId` (with `#<n>` suffix on duplicates). */
+  key: string;
+  provider: string;
+  modelId: string;
+  /** False when benched or proactively near a limit — mirrors routing. */
+  available: boolean;
+  /** Present only while benched: epoch ms when the bench expires. */
+  benchedUntil?: number;
+  /** Present when a provider header snapshot is active for a dimension. */
+  headerLimits?: {
+    requests?: { remaining: number; limit?: number; resetsAt: number };
+    tokens?: { remaining: number; limit?: number; resetsAt: number };
+  };
+  /** Present when the model has declared `limits`: self-counted usage. */
+  selfCounted?: {
+    requestsLastMinute: number;
+    requestsLastDay: number;
+    tokensLastMinute: number;
+  };
+}
+
+/** Snapshot returned by `resilientStatus`. */
+export interface ResilientStatus {
+  models: ModelStatus[];
+}
+
 /** Options for {@link createResilient}. */
 export interface ResilientOptions<
   Version extends SpecificationVersion = SpecificationVersion,

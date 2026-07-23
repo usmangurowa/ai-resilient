@@ -11,6 +11,7 @@ import type {
   FallbackReason,
   ModelConfig,
   ResilientOptions,
+  ResilientStatus,
   SpecificationVersion,
 } from './types';
 
@@ -222,6 +223,25 @@ export class ResilientLanguageModel {
       totalTokens,
       limits: candidate.config.limits,
     });
+  }
+
+  /**
+   * Read-only snapshot of per-model state: bench timers, header-derived
+   * limits, self-counted usage. Awaits pending bookkeeping writes first
+   * so the snapshot reflects all prior calls (read-your-writes), same
+   * as buildPlan. Never throws on store failure.
+   */
+  async status(): Promise<ResilientStatus> {
+    await this.pendingRecords;
+    const models = await Promise.all(
+      this.candidates.map(async (candidate) => ({
+        key: candidate.key,
+        provider: candidate.config.model.provider,
+        modelId: candidate.config.model.modelId,
+        ...(await this.tracker.status(candidate.key, candidate.config.limits)),
+      })),
+    );
+    return { models };
   }
 
   async doGenerate(

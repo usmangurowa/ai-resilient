@@ -124,6 +124,17 @@ try {
 }
 ```
 
+### Inspecting status
+
+`resilientStatus` returns a read-only snapshot of the same state the routing decisions use — which models are benched (and until when), header-derived limits, and self-counted usage. It never throws on store failure; it degrades to "available, no detail".
+
+```ts
+import { resilientStatus } from 'ai-resilient';
+
+const status = await resilientStatus(model);
+// status.models → [{ modelId, available, benchedUntil?, headerLimits?, selfCounted? }, ...]
+```
+
 ## Custom stores
 
 The default `memoryStore()` keeps state in-process, which suits long-running servers. For serverless deployments (Vercel, Netlify, Lambda), each invocation gets a fresh process, so use one of the first-party Redis adapters instead:
@@ -181,15 +192,17 @@ Store failures never break your calls: if the store throws, models are assumed a
 
 Beyond `createResilient`, these building blocks are exported:
 
-| Export                                                                                                                                           | Kind     | Purpose                                                                                                                                                     |
-| ------------------------------------------------------------------------------------------------------------------------------------------------ | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `memoryStore()`                                                                                                                                  | function | Default in-process `Store` with TTL eviction.                                                                                                               |
-| `AllModelsExhaustedError`                                                                                                                        | class    | Thrown when every model fails; has `attempts: ModelAttempt[]` and static `isInstance(error)`.                                                               |
-| `classifyError(error)`                                                                                                                           | function | Classify any error as `'rate-limit' \| 'transient' \| 'fatal'` — the same logic the fallback loop uses.                                                     |
-| `getRetryAfterMs(error)`                                                                                                                         | function | Parse a `retry-after` header (delta-seconds or HTTP-date) from an error's `responseHeaders` into milliseconds.                                              |
-| `parseRateLimitHeaders(provider, headers)`                                                                                                       | function | Parse provider rate-limit headers (OpenAI, Anthropic, Groq, Google, Mistral, IETF draft) into a normalized `ParsedRateLimit`.                               |
-| `LimitTracker`                                                                                                                                   | class    | The tracker behind proactive switching: bench state, header snapshots, sliding-window counters. Useful for custom orchestration on top of the same `Store`. |
-| `Store`, `Limits`, `ModelConfig`, `ResilientOptions`, `FallbackInfo`, `FallbackReason`, `ErrorClassification`, `ModelAttempt`, `ParsedRateLimit` | types    | Public types for the options and callbacks above.                                                                                                           |
+| Export                                                                                                                                           | Kind     | Purpose                                                                                                                                                        |
+| ------------------------------------------------------------------------------------------------------------------------------------------------ | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `memoryStore()`                                                                                                                                  | function | Default in-process `Store` with TTL eviction.                                                                                                                  |
+| `AllModelsExhaustedError`                                                                                                                        | class    | Thrown when every model fails; has `attempts: ModelAttempt[]` and static `isInstance(error)`.                                                                  |
+| `classifyError(error)`                                                                                                                           | function | Classify any error as `'rate-limit' \| 'transient' \| 'fatal'` — the same logic the fallback loop uses.                                                        |
+| `getRetryAfterMs(error)`                                                                                                                         | function | Parse a `retry-after` header (delta-seconds or HTTP-date) from an error's `responseHeaders` into milliseconds.                                                 |
+| `parseRateLimitHeaders(provider, headers)`                                                                                                       | function | Parse provider rate-limit headers (OpenAI, Anthropic, Groq, Google, Mistral, IETF draft) into a normalized `ParsedRateLimit`.                                  |
+| `LimitTracker`                                                                                                                                   | class    | The tracker behind proactive switching: bench state, header snapshots, sliding-window counters. Useful for custom orchestration on top of the same `Store`.    |
+| `resilientStatus(model)`                                                                                                                         | function | Read-only per-model status snapshot (bench timers, header limits, self-counted usage) for a model created by `createResilient`. Never throws on store failure. |
+| `ResilientStatus`, `ModelStatus`                                                                                                                 | types    | The snapshot shape returned by `resilientStatus` and its per-model entries.                                                                                    |
+| `Store`, `Limits`, `ModelConfig`, `ResilientOptions`, `FallbackInfo`, `FallbackReason`, `ErrorClassification`, `ModelAttempt`, `ParsedRateLimit` | types    | Public types for the options and callbacks above.                                                                                                              |
 
 ## Scope (v1)
 

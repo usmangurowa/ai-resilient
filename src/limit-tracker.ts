@@ -1,5 +1,5 @@
 import { parseRateLimitHeaders } from './header-parsers';
-import type { Limits, Store } from './types';
+import type { Limits, ModelStatus, Store } from './types';
 
 const MINUTE_MS = 60_000;
 const DAY_MS = 86_400_000;
@@ -81,6 +81,80 @@ export class LimitTracker {
       // Store failure: assume available.
       return true;
     }
+  }
+
+  /**
+   * Read-only per-model detail: bench expiry, active header-snapshot
+   * dimensions, and (when `limits` is declared) self-counted window
+   * usage. `available` mirrors {@link isAvailable} exactly. Never
+   * throws: on store failure it degrades to `{ available: true }`.
+   */
+  async status(
+    modelKey: string,
+    limits?: Limits,
+  ): Promise<Omit<ModelStatus, 'key' | 'provider' | 'modelId'>> {
+    try {
+      const detail: Omit<ModelStatus, 'key' | 'provider' | 'modelId'> = {
+        available: await this.isAvailable(modelKey, limits),
+      };
+
+      // Bench: same parsing rules as isBenched — the value is the bench
+      // expiry timestamp; unparseable values mean "not benched".
+      const benchRaw = await this.store.get(this.benchKey(modelKey));
+      if (benchRaw !== null) {
+        const expiresAt = Number(benchRaw);
+        if (Number.isFinite(expiresAt) && Date.now() < expiresAt) {
+          detail.benchedUntil = expiresAt;
+        }
+      }
+
+      const headersRaw = await this.store.get(this.headersKey(modelKey));
+      if (headersRaw !== null) {
+        const snapshot = JSON.parse(headersRaw) as HeaderSnapshot;
+        const now = Date.now();
+        const requests = this.dimensionStatus(snapshot.requests, now);
+        const tokens = this.dimensionStatus(snapshot.tokens, now);
+        if (requests !== undefined || tokens !== undefined) {
+          detail.headerLimits = {
+            ...(requests !== undefined ? { requests } : {}),
+            ...(tokens !== undefined ? { tokens } : {}),
+          };
+        }
+      }
+
+      if (limits !== undefined) {
+        const usage = await this.readUsage(modelKey);
+        const now = Date.now();
+        detail.selfCounted = {
+          requestsLastMinute: usage.requests.filter((t) => now - t < MINUTE_MS)
+            .length,
+          requestsLastDay: usage.requests.filter((t) => now - t < DAY_MS)
+            .length,
+          tokensLastMinute: usage.tokens
+            .filter(([t]) => now - t < MINUTE_MS)
+            .reduce((sum, [, n]) => sum + n, 0),
+        };
+      }
+
+      return detail;
+    } catch {
+      // Store failure: report available with no detail, matching
+      // isAvailable's fail-open policy.
+      return { available: true };
+    }
+  }
+
+  /** Map an unexpired stored dimension to its public status shape. */
+  private dimensionStatus(
+    dim: DimensionSnapshot | undefined,
+    now: number,
+  ): { remaining: number; limit?: number; resetsAt: number } | undefined {
+    if (dim === undefined || now >= dim.expiresAt) return undefined;
+    return {
+      remaining: dim.remaining,
+      ...(dim.limit !== undefined ? { limit: dim.limit } : {}),
+      resetsAt: dim.expiresAt,
+    };
   }
 
   private async isBenched(modelKey: string): Promise<boolean> {
