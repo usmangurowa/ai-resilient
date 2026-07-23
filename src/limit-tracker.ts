@@ -71,9 +71,15 @@ export class LimitTracker {
    */
   async isAvailable(modelKey: string, limits?: Limits): Promise<boolean> {
     try {
-      if (await this.isBenched(modelKey)) return false;
-      if (await this.isNearHeaderLimit(modelKey)) return false;
-      if (limits && (await this.isNearDeclaredLimit(modelKey, limits))) {
+      if ((await this.readBenchExpiry(modelKey)) !== undefined) return false;
+      const snapshot = await this.readHeaderSnapshot(modelKey);
+      if (snapshot !== undefined && this.headerSnapshotNearLimit(snapshot)) {
+        return false;
+      }
+      if (
+        limits &&
+        this.usageNearLimit(await this.readUsage(modelKey), limits)
+      ) {
         return false;
       }
       return true;
@@ -86,31 +92,38 @@ export class LimitTracker {
   /**
    * Read-only per-model detail: bench expiry, active header-snapshot
    * dimensions, and (when `limits` is declared) self-counted window
-   * usage. `available` mirrors {@link isAvailable} exactly. Never
-   * throws: on store failure it degrades to `{ available: true }`.
+   * usage. Each store key is fetched exactly once; `available` is
+   * derived from that same single-read state using the same predicates
+   * routing uses, so it stays equivalent to {@link isAvailable} and
+   * consistent with the detail fields. Never throws: on store failure
+   * it degrades to `{ available: true }`.
    */
   async status(
     modelKey: string,
     limits?: Limits,
   ): Promise<Omit<ModelStatus, 'key' | 'provider' | 'modelId'>> {
     try {
+      const [benchedUntil, snapshot, usage] = await Promise.all([
+        this.readBenchExpiry(modelKey),
+        this.readHeaderSnapshot(modelKey),
+        limits !== undefined ? this.readUsage(modelKey) : undefined,
+      ]);
+
+      const available =
+        benchedUntil === undefined &&
+        !(snapshot !== undefined && this.headerSnapshotNearLimit(snapshot)) &&
+        !(
+          limits !== undefined &&
+          usage !== undefined &&
+          this.usageNearLimit(usage, limits)
+        );
+
       const detail: Omit<ModelStatus, 'key' | 'provider' | 'modelId'> = {
-        available: await this.isAvailable(modelKey, limits),
+        available,
       };
+      if (benchedUntil !== undefined) detail.benchedUntil = benchedUntil;
 
-      // Bench: same parsing rules as isBenched — the value is the bench
-      // expiry timestamp; unparseable values mean "not benched".
-      const benchRaw = await this.store.get(this.benchKey(modelKey));
-      if (benchRaw !== null) {
-        const expiresAt = Number(benchRaw);
-        if (Number.isFinite(expiresAt) && Date.now() < expiresAt) {
-          detail.benchedUntil = expiresAt;
-        }
-      }
-
-      const headersRaw = await this.store.get(this.headersKey(modelKey));
-      if (headersRaw !== null) {
-        const snapshot = JSON.parse(headersRaw) as HeaderSnapshot;
+      if (snapshot !== undefined) {
         const now = Date.now();
         const requests = this.dimensionStatus(snapshot.requests, now);
         const tokens = this.dimensionStatus(snapshot.tokens, now);
@@ -122,8 +135,7 @@ export class LimitTracker {
         }
       }
 
-      if (limits !== undefined) {
-        const usage = await this.readUsage(modelKey);
+      if (usage !== undefined) {
         const now = Date.now();
         detail.selfCounted = {
           requestsLastMinute: usage.requests.filter((t) => now - t < MINUTE_MS)
@@ -157,20 +169,29 @@ export class LimitTracker {
     };
   }
 
-  private async isBenched(modelKey: string): Promise<boolean> {
+  /** Active bench expiry (epoch ms), or undefined when not benched. */
+  private async readBenchExpiry(modelKey: string): Promise<number | undefined> {
     const raw = await this.store.get(this.benchKey(modelKey));
-    if (raw === null) return false;
+    if (raw === null) return undefined;
     // Belt and braces for stores without real TTL support: the value is
     // the bench expiry timestamp. Unparseable values fail open (not
     // benched), consistent with the store-failure policy in isAvailable.
     const expiresAt = Number(raw);
-    return Number.isFinite(expiresAt) && Date.now() < expiresAt;
+    if (!Number.isFinite(expiresAt) || Date.now() >= expiresAt) {
+      return undefined;
+    }
+    return expiresAt;
   }
 
-  private async isNearHeaderLimit(modelKey: string): Promise<boolean> {
+  private async readHeaderSnapshot(
+    modelKey: string,
+  ): Promise<HeaderSnapshot | undefined> {
     const raw = await this.store.get(this.headersKey(modelKey));
-    if (raw === null) return false;
-    const snapshot = JSON.parse(raw) as HeaderSnapshot;
+    if (raw === null) return undefined;
+    return JSON.parse(raw) as HeaderSnapshot;
+  }
+
+  private headerSnapshotNearLimit(snapshot: HeaderSnapshot): boolean {
     const now = Date.now();
     // Each dimension keeps its own expiration so a fast-resetting,
     // non-limiting dimension can't wipe out a still-exhausted one.
@@ -191,11 +212,7 @@ export class LimitTracker {
     return remaining / limit <= this.threshold;
   }
 
-  private async isNearDeclaredLimit(
-    modelKey: string,
-    limits: Limits,
-  ): Promise<boolean> {
-    const usage = await this.readUsage(modelKey);
+  private usageNearLimit(usage: UsageState, limits: Limits): boolean {
     const now = Date.now();
 
     if (limits.requestsPerMinute !== undefined) {
@@ -268,7 +285,7 @@ export class LimitTracker {
       };
     }
     // Keep the snapshot around until the *slowest* dimension resets;
-    // each dimension expires individually in isNearHeaderLimit.
+    // each dimension expires individually in headerSnapshotNearLimit.
     const ttl = Math.max(
       (snapshot.requests?.expiresAt ?? 0) - now,
       (snapshot.tokens?.expiresAt ?? 0) - now,

@@ -223,4 +223,94 @@ describe('resilientStatus', () => {
     const status = await resilientStatus(model);
     expect(status.models[0]?.selfCounted?.requestsLastMinute).toBe(1);
   });
+
+  describe('store reads', () => {
+    function countingStore(): { store: Store; gets: string[] } {
+      const map = new Map<string, string>();
+      const gets: string[] = [];
+      return {
+        gets,
+        store: {
+          async get(key) {
+            gets.push(key);
+            return map.get(key) ?? null;
+          },
+          async set(key, value) {
+            map.set(key, value);
+          },
+        },
+      };
+    }
+
+    it('reads bench, headers, and usage exactly once each for a model with declared limits', async () => {
+      const { store, gets } = countingStore();
+      const primary = new MockLanguageModelV2({
+        provider: 'mock-a',
+        modelId: 'model-a',
+      });
+      const model = createResilient({
+        models: [{ model: primary, limits: { requestsPerMinute: 10 } }],
+        store,
+      });
+
+      await resilientStatus(model);
+      expect(gets).toHaveLength(3);
+      expect(
+        gets.filter((k) => k.startsWith('ai-resilient:bench:')),
+      ).toHaveLength(1);
+      expect(
+        gets.filter((k) => k.startsWith('ai-resilient:headers:')),
+      ).toHaveLength(1);
+      expect(
+        gets.filter((k) => k.startsWith('ai-resilient:usage:')),
+      ).toHaveLength(1);
+    });
+
+    it('reads only bench and headers for a model without declared limits', async () => {
+      const { store, gets } = countingStore();
+      const primary = new MockLanguageModelV2({
+        provider: 'mock-a',
+        modelId: 'model-a',
+      });
+      const model = createResilient({
+        models: [{ model: primary }],
+        store,
+      });
+
+      await resilientStatus(model);
+      expect(gets).toHaveLength(2);
+      expect(
+        gets.filter((k) => k.startsWith('ai-resilient:bench:')),
+      ).toHaveLength(1);
+      expect(
+        gets.filter((k) => k.startsWith('ai-resilient:headers:')),
+      ).toHaveLength(1);
+      expect(
+        gets.filter((k) => k.startsWith('ai-resilient:usage:')),
+      ).toHaveLength(0);
+    });
+
+    it('reports available and benchedUntil consistently from a single bench read', async () => {
+      const { store } = countingStore();
+      const benchedUntil = Date.now() + 60_000;
+      await store.set(
+        'ai-resilient:bench:mock-a:model-a',
+        String(benchedUntil),
+      );
+      const primary = new MockLanguageModelV2({
+        provider: 'mock-a',
+        modelId: 'model-a',
+      });
+      const model = createResilient({
+        models: [{ model: primary }],
+        store,
+      });
+
+      const status = await resilientStatus(model);
+      expect(status.models[0]).toMatchObject({
+        available: false,
+        benchedUntil,
+      });
+    });
+  });
 });

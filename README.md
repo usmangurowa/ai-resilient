@@ -152,7 +152,9 @@ import { redisStore } from 'ai-resilient/redis';
 
 const model = createResilient({
   models,
-  store: redisStore(new Redis(process.env.REDIS_URL!)),
+  store: redisStore(
+    new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379'),
+  ),
 });
 ```
 
