@@ -9,19 +9,21 @@ export interface Limits {
 }
 
 /** Language model specification versions the wrapper supports. */
-export type SpecificationVersion = 'v2' | 'v3';
+export type SpecificationVersion = 'v2' | 'v3' | 'v4';
 
 /**
- * Structural stand-in for a language model of either specification
- * version (`LanguageModelV2` from ai v5 / provider v2, `LanguageModelV3`
- * from ai v6 / provider v3).
+ * Structural stand-in for a language model of any supported
+ * specification version (`LanguageModelV2` from ai v5 / provider v2,
+ * `LanguageModelV3` from ai v6 / provider v3, `LanguageModelV4` from
+ * ai v7 / provider v4).
  *
- * `LanguageModelV3` is deliberately not imported from `@ai-sdk/provider`:
- * the type only exists in provider v3, so importing it would break
- * type-checking for consumers still on provider v2. TypeScript's
- * structural typing makes real models of both versions assignable to
- * this shape, and values of this shape assignable to the concrete
- * `LanguageModelV2` / `LanguageModelV3` interfaces.
+ * `LanguageModelV3` / `LanguageModelV4` are deliberately not imported
+ * from `@ai-sdk/provider`: those types only exist in provider v3/v4, so
+ * importing them would break type-checking for consumers still on
+ * provider v2. TypeScript's structural typing makes real models of all
+ * versions assignable to this shape, and values of this shape assignable
+ * to the concrete `LanguageModelV2` / `LanguageModelV3` /
+ * `LanguageModelV4` interfaces.
  */
 export interface AnyLanguageModel<
   Version extends SpecificationVersion = SpecificationVersion,

@@ -6,7 +6,7 @@
 [![zero dependencies](https://img.shields.io/badge/dependencies-0-brightgreen.svg)](https://www.npmjs.com/package/ai-resilient?activeTab=dependencies)
 [![license](https://img.shields.io/npm/l/ai-resilient.svg)](https://github.com/usmangurowa/ai-resilient/blob/main/LICENSE)
 
-Smart model fallback for the [Vercel AI SDK](https://ai-sdk.dev) (v5 and v6).
+Smart model fallback for the [Vercel AI SDK](https://ai-sdk.dev) (v5, v6, and v7).
 
 ## Why
 
@@ -53,9 +53,9 @@ Works transparently with `generateText`, `streamText`, `generateObject`, and `st
 npm install ai-resilient ai
 ```
 
-`ai` (v5 or v6) and `@ai-sdk/provider` are peer dependencies (`@ai-sdk/provider` ships with `ai`, so most package managers install it automatically). `ai-resilient` has zero runtime dependencies.
+`ai` (v5, v6, or v7) and `@ai-sdk/provider` are peer dependencies (`@ai-sdk/provider` ships with `ai`, so most package managers install it automatically). `ai-resilient` has zero runtime dependencies. Note that ai v7 itself requires Node 22+ and is ESM-only — a constraint of ai v7, not of ai-resilient.
 
-The returned model mirrors the specification version of the models it wraps — `LanguageModelV2` on ai v5, `LanguageModelV3` on ai v6 — so it plugs into `generateText`/`streamText`/`generateObject`/`streamObject` on either major. All models in one chain must come from the same SDK major; mixing throws at construction.
+The returned model mirrors the specification version of the models it wraps — `LanguageModelV2` on ai v5, `LanguageModelV3` on ai v6, `LanguageModelV4` on ai v7 — so it plugs into `generateText`/`streamText`/`generateObject`/`streamObject` on any of those majors. All models in one chain must come from the same SDK major; mixing throws at construction.
 
 ## Usage
 
