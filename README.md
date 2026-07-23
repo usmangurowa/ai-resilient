@@ -126,7 +126,28 @@ try {
 
 ## Custom stores
 
-The default `memoryStore()` keeps state in-process, which suits long-running servers. For serverless deployments, plug in any store implementing:
+The default `memoryStore()` keeps state in-process, which suits long-running servers. For serverless deployments (Vercel, Netlify, Lambda), each invocation gets a fresh process, so use one of the first-party Redis adapters instead:
+
+```ts
+import { Redis } from '@upstash/redis';
+import { upstashStore } from 'ai-resilient/upstash';
+
+const model = createResilient({ models, store: upstashStore(Redis.fromEnv()) });
+```
+
+```ts
+import { Redis } from 'ioredis';
+import { redisStore } from 'ai-resilient/redis';
+
+const model = createResilient({
+  models,
+  store: redisStore(new Redis(process.env.REDIS_URL!)),
+});
+```
+
+The client packages (`@upstash/redis`, `ioredis`) are optional peer dependencies — install the one you use. The adapters accept an existing client and never create or close connections. One caveat for distributed setups: self-counted sliding-window limits are best-effort across concurrent serverless instances (last-write-wins on the usage window); bench state and header snapshots are unaffected.
+
+For other backends, plug in any store implementing:
 
 ```ts
 interface Store {
@@ -135,7 +156,7 @@ interface Store {
 }
 ```
 
-Example Redis adapter (using `ioredis`):
+Example hand-rolled adapter (using `ioredis`):
 
 ```ts
 import Redis from 'ioredis';

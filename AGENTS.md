@@ -39,6 +39,16 @@ runs `npm publish --provenance` (the npm lifecycle runs the full gate via
 importing the class and using `instanceof`. Keep it that way — importing
 `@ai-sdk/provider` at runtime would introduce a runtime dependency.
 
+### Store adapters
+
+Store adapters live in `src/stores/` and are exposed **only** via subpath
+exports (`ai-resilient/redis`, `ai-resilient/upstash`) — never re-export
+them from `src/index.ts`, or the root bundle would reference optional
+packages. Adapters import client types **type-only** (erased at build
+time), never construct or close clients (the user owns the connection
+lifecycle), and their client packages are **optional peer dependencies**
+(`peerDependenciesMeta`) plus tsup `external` entries.
+
 ### Spec-version support (v2/v3/v4)
 
 The wrapper supports `LanguageModelV2` (ai v5), `LanguageModelV3`
