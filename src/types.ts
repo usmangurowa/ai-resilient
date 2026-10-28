@@ -9,19 +9,19 @@ export interface Limits {
 }
 
 /** Language model specification versions the wrapper supports. */
-export type SpecificationVersion = 'v2' | 'v3';
+export type SpecificationVersion = 'v2' | 'v3' | 'v4';
 
 /**
- * Structural stand-in for a language model of either specification
+ * Structural stand-in for a language model of any supported specification
  * version (`LanguageModelV2` from ai v5 / provider v2, `LanguageModelV3`
- * from ai v6 / provider v3).
+ * from ai v6 / provider v3, `LanguageModelV4` from ai v7 / provider v4).
  *
- * `LanguageModelV3` is deliberately not imported from `@ai-sdk/provider`:
- * the type only exists in provider v3, so importing it would break
- * type-checking for consumers still on provider v2. TypeScript's
- * structural typing makes real models of both versions assignable to
- * this shape, and values of this shape assignable to the concrete
- * `LanguageModelV2` / `LanguageModelV3` interfaces.
+ * `LanguageModelV3` and `LanguageModelV4` are deliberately not imported
+ * from `@ai-sdk/provider`: they only exist in newer provider majors, so
+ * importing them would break type-checking for consumers on older ones.
+ * TypeScript's structural typing makes real models of every version
+ * assignable to this shape, and values of this shape assignable to the
+ * concrete `LanguageModelV2` / `V3` / `V4` interfaces.
  */
 export interface AnyLanguageModel<
   Version extends SpecificationVersion = SpecificationVersion,
@@ -33,8 +33,8 @@ export interface AnyLanguageModel<
     PromiseLike<Record<string, RegExp[]>> | Record<string, RegExp[]>;
   /* eslint-disable @typescript-eslint/no-explicit-any --
    * The exact call-option/result shapes are owned by the wrapped models'
-   * spec version; `any` keeps this stand-in mutually assignable with both
-   * LanguageModelV2 and LanguageModelV3. */
+   * spec version; `any` keeps this stand-in mutually assignable with
+   * LanguageModelV2, LanguageModelV3 and LanguageModelV4. */
   doGenerate(options: any): PromiseLike<any>;
   doStream(options: any): PromiseLike<any>;
   /* eslint-enable @typescript-eslint/no-explicit-any */
@@ -81,8 +81,8 @@ export interface ResilientOptions<
 > {
   /**
    * Models to try, in priority order. At least one is required. All
-   * models must implement the same specification version (mixing ai v5
-   * and ai v6 models is rejected at construction).
+   * models must implement the same specification version (mixing models
+   * from different ai majors is rejected at construction).
    */
   models: ModelConfig<Version>[];
   /** State store. Defaults to an in-process `memoryStore()`. */
