@@ -1,7 +1,8 @@
-// Tests for provider-spec v3 (ai v6) support. MockLanguageModelV2 from
+// Tests for provider-spec v3 (ai v6) and v4 (ai v7) support. The two
+// specs share usage and stream shapes, so every case runs for both. MockLanguageModelV2 from
 // 'ai/test' (ai v5 dev dep) only produces v2 models, so v3 models are
 // hand-rolled structural mocks here.
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { createResilient } from '../src/index';
 import type { AnyLanguageModel, FallbackInfo } from '../src/index';
 
@@ -29,7 +30,12 @@ interface MockV3Options {
   doStream?: () => PromiseLike<unknown>;
 }
 
-interface MockV3 extends AnyLanguageModel<'v3'> {
+type NestedVersion = 'v3' | 'v4';
+
+/** The spec version the current `describe.each` pass mocks. */
+let specVersion: NestedVersion = 'v3';
+
+interface MockV3 extends AnyLanguageModel<NestedVersion> {
   doGenerateCalls: unknown[];
   doStreamCalls: unknown[];
 }
@@ -38,7 +44,7 @@ function mockV3Model(options: MockV3Options = {}): MockV3 {
   const doGenerateCalls: unknown[] = [];
   const doStreamCalls: unknown[] = [];
   return {
-    specificationVersion: 'v3',
+    specificationVersion: specVersion,
     provider: options.provider ?? 'mock-v3',
     modelId: options.modelId ?? 'model-v3',
     supportedUrls: {},
@@ -94,10 +100,14 @@ async function readAll(
   }
 }
 
-describe('provider-spec v3 support', () => {
+describe.each(['v3', 'v4'] as const)('provider-spec %s support', (version) => {
+  beforeEach(() => {
+    specVersion = version;
+  });
+
   it('mirrors the wrapped models specification version', () => {
     const v3 = createResilient({ models: [{ model: mockV3Model() }] });
-    expect(v3.specificationVersion).toBe('v3');
+    expect(v3.specificationVersion).toBe(version);
   });
 
   it('rejects a chain that mixes specification versions', () => {
@@ -109,7 +119,7 @@ describe('provider-spec v3 support', () => {
       createResilient({
         models: [{ model: mockV3Model() }, { model: v2Model }],
       }),
-    ).toThrow(/same specification version.*v2, v3/);
+    ).toThrow(new RegExp(`same specification version.*v2, ${version}`));
   });
 
   it('passes v3 generate results through unchanged', async () => {

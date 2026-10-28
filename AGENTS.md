@@ -4,7 +4,7 @@ Guidance for AI coding agents working in this repository.
 
 ## What this is
 
-`ai-resilient` wraps Vercel AI SDK v5/v6 with reactive fallback (on rate-limit /
+`ai-resilient` wraps Vercel AI SDK v5/v6/v7 with reactive fallback (on rate-limit /
 transient errors) and proactive switching (before limits are hit). The
 authoritative behaviour spec is
 [docs/specs/2026-07-21-ai-resilient-design.md](docs/specs/2026-07-21-ai-resilient-design.md)
@@ -39,22 +39,23 @@ runs `npm publish --provenance` (the npm lifecycle runs the full gate via
 importing the class and using `instanceof`. Keep it that way — importing
 `@ai-sdk/provider` at runtime would introduce a runtime dependency.
 
-### Dual spec-version support (v2/v3)
+### Multi spec-version support (v2/v3/v4)
 
-The wrapper supports both `LanguageModelV2` (ai v5) and `LanguageModelV3`
-(ai v6) via the structural `AnyLanguageModel` type in `src/types.ts`. Never
-`import type { LanguageModelV3 }` — it doesn't exist in provider v2, so the
-emitted d.ts would break consumers on ai v5. Related invariants:
+The wrapper supports `LanguageModelV2` (ai v5), `LanguageModelV3` (ai v6) and
+`LanguageModelV4` (ai v7) via the structural `AnyLanguageModel` type in
+`src/types.ts`. Never `import type { LanguageModelV3 }` or `LanguageModelV4` —
+they don't exist in provider v2, so the emitted d.ts would break consumers on
+ai v5. Related invariants:
 
 - `ResilientLanguageModel.specificationVersion` is a **getter** delegating
-  to the primary model. Hardcoding `'v2'` makes ai v6 wrap the model in its
+  to the primary model. Hardcoding `'v2'` makes ai v6/v7 wrap the model in a
   v2→v3 compat adapter and double-convert already-v3 pass-through results.
 - Mixed spec versions in one chain throw at construction.
 - Usage token counts are normalized in `recordSuccess`
   (`extractTotalTokens`): v2 usage is flat numbers with `totalTokens`,
-  v3 usage nests `{ total }` objects with no top-level total.
-- Dev deps stay on `ai@5`/`provider@2`; v3 paths are tested with
-  hand-rolled structural mocks in `test/resilient-v3.test.ts`
+  v3 and v4 usage nest `{ total }` objects with no top-level total.
+- Dev deps stay on `ai@5`/`provider@2`; v3 and v4 paths are tested
+  with hand-rolled structural mocks in `test/resilient-v3.test.ts`
   (`MockLanguageModelV2` was removed in ai v6, and `ai/test` mocks
   can't represent v3 shapes on v5).
 

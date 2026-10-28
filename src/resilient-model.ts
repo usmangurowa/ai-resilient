@@ -38,7 +38,7 @@ const PRELUDE_PART_TYPES = new Set(['stream-start', 'response-metadata']);
 
 /**
  * Extract a token count from a usage field that may be a v2 flat number
- * or a v3 nested `{ total: number }` object.
+ * or a v3/v4 nested `{ total: number }` object.
  */
 function tokenCount(value: unknown): number | undefined {
   if (typeof value === 'number') return value;
@@ -69,7 +69,7 @@ function extractTotalTokens(usage: unknown): number | undefined {
  * A resilient language model that transparently falls back across a
  * chain of models on rate-limit and transient errors, and proactively
  * skips models that are near a known rate limit. Mirrors the spec
- * version (v2 or v3) of the models it wraps.
+ * version (v2, v3 or v4) of the models it wraps.
  */
 export class ResilientLanguageModel {
   readonly provider = 'ai-resilient';
@@ -121,8 +121,8 @@ export class ResilientLanguageModel {
 
   /**
    * Reported dynamically from the wrapped models: hardcoding 'v2' would
-   * make ai v6 wrap this model in its v2→v3 compat adapter and
-   * double-convert the already-v3 results passed through unchanged.
+   * make ai v6/v7 wrap this model in a compat adapter and
+   * double-convert the already-v3/v4 results passed through unchanged.
    */
   get specificationVersion(): SpecificationVersion {
     return this.primary.specificationVersion;
